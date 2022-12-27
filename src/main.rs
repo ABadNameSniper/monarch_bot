@@ -1,86 +1,92 @@
-use std::{env, error::Error, sync::Arc};
-use futures::stream::StreamExt;
-use twilight_cache_inmemory::{InMemoryCache, ResourceType};
-use twilight_gateway::{Cluster, Event};
-use twilight_http::Client as HttpClient;
-use twilight_model::gateway::Intents;
+use futures_util::StreamExt;
+use twilight_http;
+use std::env;
+use twilight_gateway::{Event, Intents, Shard};
+use twilight_model::{
+    gateway::{
+        payload::outgoing::{
+            UpdatePresence,
+            RequestGuildMembers
+        },
+        presence::{
+            Activity, ActivityType, MinimalActivity, Status
+        }
+    }, 
+    id::Id,
+};
+
+
+use twilight_http::Client;
+
+//::new(&client, String::from("Epic New Server"));
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let token = env::var("AAAD")?;
-    println!("{}", &token);
+    // Initialize the tracing subscriber.
+    tracing_subscriber::fmt::init();
 
-    // Use intents to only receive guild message events.
+    let token = env::var("DISCORD_TOKEN")?;
+    // To interact with the gateway we first need to connect to it (with a shard or cluster)
+    let (shard, mut events) = Shard::new(
+        token.to_owned(),
+        Intents::GUILD_MEMBERS | Intents::GUILDS,
+    );
 
-    // A cluster is a manager for multiple shards that by default
-    // creates as many shards as Discord recommends.
-    let (cluster, mut events) = Cluster::new(token.to_owned(), Intents::GUILD_MESSAGES | Intents::MESSAGE_CONTENT).await?;
-    let cluster = Arc::new(cluster);
+    let client = Client::new(token.to_owned());
 
-    // Start up the cluster.
-    let cluster_spawn = Arc::clone(&cluster);
+    shard.start().await?;
+    println!("Created shard");
 
-    // Start all shards in the cluster in the background.
-    tokio::spawn(async move {
-        cluster_spawn.up().await;
-    });
 
-    // HTTP is separate from the gateway, so create a new client.
-    let http = Arc::new(HttpClient::new(token));
+    
 
-    // Since we only care about new messages, make the cache only
-    // cache new messages.
-    let cache = InMemoryCache::builder()
-        .resource_types(ResourceType::MESSAGE)
-        .build();
+    while let Some(event) = events.next().await {
 
-    // Process each event as they come in.
-    while let Some((shard_id, event)) = events.next().await {
-        // Update the cache with the event.
-        cache.update(&event);
+        println!("Event: {event:?}");
 
-        tokio::spawn(handle_event(shard_id, event, Arc::clone(&http)));
-    }
+        match &event {
+            Event::GuildCreate(guild) => {
+                // Let's request all of the guild's members for caching.
+                //println!("Cool guild made. {event:?}");
 
-    let server_name = String::from("AAAD New Server");
+                shard
+                    .command(&RequestGuildMembers::builder(guild.id).query("", None))
+                    .await?;
+            }
+            Event::Ready(_) => {
 
-    // let _aaad_new_server = match http.create_guild(server_name) {
-    //     Ok(guild) => guild,
-    //     Err(_error) => panic!("ijnavlid name bruh"),
-    // };
+                //::new(&client, String::from("Epic New Server"));
+                
+                let minimal_activity = MinimalActivity {
+                    kind: ActivityType::Custom,
+                    name: "running on twilight".to_owned(),
+                    url: None,
+                };
+                let command = UpdatePresence::new(
+                    Vec::from([Activity::from(minimal_activity)]),
+                    false,
+                    Some(1),
+                    Status::Online,
+                )?;
 
-    let _aaad_new_server = http.create_guild(server_name).expect("Invalid Name!");
+                shard.command(&command).await?;
 
-    //http.create_invite(channel_id)
+                println!("Time for a new guild!");
 
-    //println!("{}", aaad_new_server.fields);
+                //To-Do:
+                //pay attention to this, get the ID, make the invite immediately after this.
+                let new_guild = client.create_guild(String::from("Neat New Server")).expect("Invalid Name!").await?;
 
-    Ok(())
-}
+                println!("New guild created?");
 
-async fn create_guild() -> anyhow::Result<()> {
-    println!("uh oh");
-    Ok(())
-}
+                //new_guild.add_role();
 
-async fn handle_event(
-    shard_id: u64,
-    event: Event,
-    http: Arc<HttpClient>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    match event {
-        Event::MessageCreate(msg) if msg.content == "!ping" => {
-            http.create_message(msg.channel_id)
-                .content("Pong!")?
-                .await?;
-        }
-        Event::ShardConnected(_) => {
-            println!("Connected on shard {shard_id}");
+                //shard.command(&new_guild);
 
-        }
-        // Other events here...
-        _ => {
-            println!("Event: {event:?}");
+            }
+            _ => {
+                
+            }
         }
     }
 
