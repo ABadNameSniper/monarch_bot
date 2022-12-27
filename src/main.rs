@@ -1,6 +1,6 @@
 use futures_util::StreamExt;
 use twilight_http;
-use std::env;
+use std::{env, process::exit};
 use twilight_gateway::{Event, Intents, Shard};
 use twilight_model::{
     gateway::{
@@ -13,9 +13,8 @@ use twilight_model::{
         }
     }, 
     id::Id,
+    guild::Permissions
 };
-
-
 use twilight_http::Client;
 
 //::new(&client, String::from("Epic New Server"));
@@ -37,12 +36,9 @@ async fn main() -> anyhow::Result<()> {
     shard.start().await?;
     println!("Created shard");
 
-
-    
-
     while let Some(event) = events.next().await {
 
-        println!("Event: {event:?}");
+        //println!("Event: {event:?}");
 
         match &event {
             Event::GuildCreate(guild) => {
@@ -55,11 +51,13 @@ async fn main() -> anyhow::Result<()> {
             }
             Event::Ready(_) => {
 
-                //::new(&client, String::from("Epic New Server"));
+                println!("Ready for action!");
+
                 
+
                 let minimal_activity = MinimalActivity {
-                    kind: ActivityType::Custom,
-                    name: "running on twilight".to_owned(),
+                    kind: ActivityType::Playing,
+                    name: "Russian roulette but with people instead of bullets".to_owned(),
                     url: None,
                 };
                 let command = UpdatePresence::new(
@@ -70,23 +68,69 @@ async fn main() -> anyhow::Result<()> {
                 )?;
 
                 shard.command(&command).await?;
+                println!("Status set!");
 
-                println!("Time for a new guild!");
+                let new_guild = client
+                    .create_guild(String::from("Another Test Server"))
+                    .expect("Invalid Name!")
+                    .await?
+                    .model()
+                    .await?;
+                    
+                let new_system_channel_id = new_guild.system_channel_id.expect("Crap, couldn't get the system channel ID");
+                println!("Guild created!");
 
-                //To-Do:
-                //pay attention to this, get the ID, make the invite immediately after this.
-                let new_guild = client.create_guild(String::from("Neat New Server")).expect("Invalid Name!").await?;
 
-                println!("New guild created?");
-
-                //new_guild.add_role();
-
-                //shard.command(&new_guild);
-
-            }
-            _ => {
+                // //This works, doesn't return the code, though
+                let new_invite = client.create_invite(new_system_channel_id).await?;
                 
+                let new_channel_id = new_invite.model().await?.channel.expect("oops no channel").id;
+
+                let channel_invites = client.channel_invites(new_channel_id).await?;
+                let new_invite_code = &channel_invites.model().await?[0].code;
+
+                println!("Invite code: discord.gg/{new_invite_code}");
+
+                let admin_permission = Permissions::ADMINISTRATOR;
+
+                let admin_role = client.create_role(new_guild.id)
+                    .name("The Administrator")
+                    .permissions(admin_permission)
+                    .await?;
+
+                let admin_role_id = admin_role.model().await?.id;
+
+                let all_role_ids = vec![admin_role_id];
+
+                //TODO
+                // wait for everyone to join the server, have slash command to start the administration
+                // (destroy slash command after use)
+                // include options like period of role changing
+
+                println!("Administrator role created. Waiting for first person to join");
+
+                while let Some(event) = events.next().await {
+                    match &event {
+                        Event::MemberAdd(member) => {
+                            let _member = client
+                            .update_guild_member(
+                                new_guild.id, 
+                                member.user.id
+                            )
+                            .roles(&all_role_ids)
+                            .await?
+                            .model()
+                            .await?;
+
+                            //TODO this should be running like 24/7 and changing the admin periodically
+                            println!("Administrator assigned, quitting program");
+                            exit(0);
+                        }
+                        _ => {}
+                    }
+                }
             }
+            _ => {}
         }
     }
 
