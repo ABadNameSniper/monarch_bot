@@ -4,20 +4,14 @@ use std::{env, process::exit};
 use twilight_gateway::{Event, Intents, Shard};
 use twilight_model::{
     gateway::{
-        payload::outgoing::{
-            UpdatePresence,
-            RequestGuildMembers
-        },
+        payload::outgoing::UpdatePresence,
         presence::{
             Activity, ActivityType, MinimalActivity, Status
         }
     }, 
-    id::Id,
     guild::Permissions
 };
 use twilight_http::Client;
-
-//::new(&client, String::from("Epic New Server"));
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -38,22 +32,13 @@ async fn main() -> anyhow::Result<()> {
 
     while let Some(event) = events.next().await {
 
-        //println!("Event: {event:?}");
+        // i'm not sure if this is the best way to wait for this, but it's what
+        // the example gave me
 
         match &event {
-            Event::GuildCreate(guild) => {
-                // Let's request all of the guild's members for caching.
-                //println!("Cool guild made. {event:?}");
-
-                shard
-                    .command(&RequestGuildMembers::builder(guild.id).query("", None))
-                    .await?;
-            }
             Event::Ready(_) => {
 
                 println!("Ready for action!");
-
-                
 
                 let minimal_activity = MinimalActivity {
                     kind: ActivityType::Playing,
@@ -71,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
                 println!("Status set!");
 
                 let new_guild = client
-                    .create_guild(String::from("Another Test Server"))
+                    .create_guild(String::from("Brand New Server"))
                     .expect("Invalid Name!")
                     .await?
                     .model()
