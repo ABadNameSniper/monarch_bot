@@ -1,6 +1,7 @@
 use futures_util::StreamExt;
 use twilight_http;
-use std::{env, process::exit};
+use core::panic;
+use std::{env, process::exit, fs, fs::*, str::FromStr};
 use twilight_gateway::{Event, Intents, Shard};
 use twilight_model::{
     gateway::{
@@ -9,9 +10,13 @@ use twilight_model::{
             Activity, ActivityType, MinimalActivity, Status
         }
     }, 
+    id::{Id, self},
     guild::Permissions
 };
 use twilight_http::Client;
+use std::io;
+use std::io::Write;
+
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -55,6 +60,41 @@ async fn main() -> anyhow::Result<()> {
                 shard.command(&command).await?;
                 println!("Status set!");
 
+                let mut new_file = match File::options().read(true).write(true).create_new(true).open("serverid.txt") {
+                    Ok(file) => file,
+                    Err(_) => {
+                        let server_id: u64 = fs::read_to_string("serverid.txt")?.parse().expect("crap");
+
+                        println!("Looks like you already have a server. Press enter to continue or \"RESTART WITH NEW SERVER\" to restart with a new server.");
+            
+                        let mut response = String::new();
+            
+                        io::stdin()
+                            .read_line(&mut response)
+                            .expect("Something went wrong reading input");
+            
+                        //let destroy_server = response.eq("RESTART WITH NEW SERVER");
+            
+                        println!("Response: {response}");//, {destroy_server}");//
+
+                        if response.trim() == "RESTART WITH NEW SERVER" {
+                            let discord_response = client
+                                .delete_guild(Id::new_checked(server_id).unwrap())
+                                .await?;
+
+                            println!("Response from discord: {discord_response:?}");
+                            println!("Destroyed old server!");
+
+                            fs::remove_file("serverid.txt").unwrap();
+
+                            
+                        }
+
+                        File::options().read(true).write(true).create_new(true).open("serverid.txt")? //better not error pls
+                        
+                    }
+                };
+
                 let new_guild = client
                     .create_guild(String::from("Brand New Server"))
                     .expect("Invalid Name!")
@@ -65,12 +105,14 @@ async fn main() -> anyhow::Result<()> {
                 let new_system_channel_id = new_guild.system_channel_id.expect("Crap, couldn't get the system channel ID");
                 println!("Guild created!");
 
+                //save the server id
+                new_file.write_all(&new_guild.id.get().to_be_bytes())?;
+                println!("Guild ID saved");
 
-                // //This works, doesn't return the code, though
+                // This doesn't return the code
                 let new_invite = client.create_invite(new_system_channel_id).await?;
-                
+                // Get the code from here instead
                 let new_channel_id = new_invite.model().await?.channel.expect("oops no channel").id;
-
                 let channel_invites = client.channel_invites(new_channel_id).await?;
                 let new_invite_code = &channel_invites.model().await?[0].code;
 
