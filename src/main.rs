@@ -1,7 +1,6 @@
 use futures_util::StreamExt;
 use twilight_http;
-use core::panic;
-use std::{env, process::exit, fs, fs::*, str::FromStr};
+use std::{env, process::exit, fs, fs::*};
 use twilight_gateway::{Event, Intents, Shard};
 use twilight_model::{
     gateway::{
@@ -10,7 +9,7 @@ use twilight_model::{
             Activity, ActivityType, MinimalActivity, Status
         }
     }, 
-    id::{Id, self},
+    id::Id,
     guild::Permissions
 };
 use twilight_http::Client;
