@@ -14,8 +14,6 @@ use twilight_model::{
 };
 use twilight_http::Client;
 use std::io;
-use std::io::Write;
-
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -59,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
                 shard.command(&command).await?;
                 println!("Status set!");
 
-                let new_file = match File::options().read(true).write(true).create_new(true).open("guild_id.txt") {
+                let _new_file = match File::options().read(true).write(true).create_new(true).open("guild_id.txt") {
                     Ok(file) => file,
                     Err(_) => {
                         let server_id: u64 = fs::read_to_string("guild_id.txt")?.parse().expect("Couldn't read guild_id.txt");
