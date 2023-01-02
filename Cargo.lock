@@ -24,32 +24,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "an_admin_a_day"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ed25519-dalek",
- "futures",
- "futures-util",
- "hex",
- "hyper",
- "log",
- "metrics-runtime",
- "once_cell",
- "serde",
- "serde_json",
- "tokio 1.23.0",
- "tracing",
- "tracing-subscriber",
- "twilight-cache-inmemory",
- "twilight-gateway",
- "twilight-http",
- "twilight-lavalink",
- "twilight-model",
- "twilight-standby",
-]
-
-[[package]]
 name = "anyhow"
 version = "1.0.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1268,6 +1242,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "setup"
+version = "1.0.1"
+dependencies = [
+ "anyhow",
+ "ed25519-dalek",
+ "futures",
+ "futures-util",
+ "hex",
+ "hyper",
+ "log",
+ "metrics-runtime",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "tokio 1.23.0",
+ "tracing",
+ "tracing-subscriber",
+ "twilight-cache-inmemory",
+ "twilight-gateway",
+ "twilight-http",
+ "twilight-lavalink",
+ "twilight-model",
+ "twilight-standby",
+]
+
+[[package]]
 name = "sha-1"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1352,6 +1352,33 @@ name = "subtle"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
+
+[[package]]
+name = "switch_admins"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "ed25519-dalek",
+ "futures",
+ "futures-util",
+ "hex",
+ "hyper",
+ "log",
+ "metrics-runtime",
+ "once_cell",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "tokio 1.23.0",
+ "tracing",
+ "tracing-subscriber",
+ "twilight-cache-inmemory",
+ "twilight-gateway",
+ "twilight-http",
+ "twilight-lavalink",
+ "twilight-model",
+ "twilight-standby",
+]
 
 [[package]]
 name = "syn"

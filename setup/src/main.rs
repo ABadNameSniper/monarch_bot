@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
 
                 let minimal_activity = MinimalActivity {
                     kind: ActivityType::Playing,
-                    name: "Russian roulette but with people instead of bullets".to_owned(),
+                    name: "Setting up a brand new server!".to_owned(),
                     url: None,
                 };
                 let command = UpdatePresence::new(
@@ -59,10 +59,10 @@ async fn main() -> anyhow::Result<()> {
                 shard.command(&command).await?;
                 println!("Status set!");
 
-                let mut new_file = match File::options().read(true).write(true).create_new(true).open("serverid.txt") {
+                let new_file = match File::options().read(true).write(true).create_new(true).open("guild_id.txt") {
                     Ok(file) => file,
                     Err(_) => {
-                        let server_id: u64 = fs::read_to_string("serverid.txt")?.parse().expect("crap");
+                        let server_id: u64 = fs::read_to_string("guild_id.txt")?.parse().expect("Couldn't read guild_id.txt");
 
                         println!("Looks like you already have a server. Press enter to continue or \"RESTART WITH NEW SERVER\" to restart with a new server.");
             
@@ -84,13 +84,17 @@ async fn main() -> anyhow::Result<()> {
                             println!("Response from discord: {discord_response:?}");
                             println!("Destroyed old server!");
 
-                            fs::remove_file("serverid.txt").unwrap();
+                            fs::remove_file("guild_id.txt")?;
+                            fs::remove_file("administrator_id.txt")?;
+                            fs::remove_file("admin_role_id.txt")?;
 
-                            
+                            File::options().read(true).write(true).create_new(true).open("guild_id.txt")? //better not error pls
+                        } else {
+                            println!("Alright, stopping setup execution.");
+                            exit(0);
                         }
+                        //panic!("Just deleting rn");
 
-                        File::options().read(true).write(true).create_new(true).open("serverid.txt")? //better not error pls
-                        
                     }
                 };
 
@@ -101,11 +105,13 @@ async fn main() -> anyhow::Result<()> {
                     .model()
                     .await?;
                     
-                let new_system_channel_id = new_guild.system_channel_id.expect("Crap, couldn't get the system channel ID");
+                let new_system_channel_id = new_guild.system_channel_id.expect("Couldn't get the system channel ID");
                 println!("Guild created!");
 
                 //save the server id
-                new_file.write_all(&new_guild.id.get().to_be_bytes())?;
+                //new_file.write_all(&new_guild.id.get().to_string())?;
+                //idk how to work with the file struct thingies so we're doing it this way I guess
+                fs::write("guild_id.txt", new_guild.id.get().to_string())?;
                 println!("Guild ID saved");
 
                 // This doesn't return the code
@@ -126,8 +132,6 @@ async fn main() -> anyhow::Result<()> {
 
                 let admin_role_id = admin_role.model().await?.id;
 
-                let all_role_ids = vec![admin_role_id];
-
                 //TODO
                 // wait for everyone to join the server, have slash command to start the administration
                 // (destroy slash command after use)
@@ -135,21 +139,21 @@ async fn main() -> anyhow::Result<()> {
 
                 println!("Administrator role created. Waiting for first person to join");
 
+                fs::write("admin_role_id.txt", admin_role_id.get().to_string())?;
+                println!("Admin role saved to file");
+
                 while let Some(event) = events.next().await {
                     match &event {
                         Event::MemberAdd(member) => {
-                            let _member = client
-                            .update_guild_member(
+                            let _member = client.add_guild_member_role(
                                 new_guild.id, 
-                                member.user.id
-                            )
-                            .roles(&all_role_ids)
-                            .await?
-                            .model()
-                            .await?;
+                                member.user.id,
+                                admin_role_id
+                            ).await;
 
-                            //TODO this should be running like 24/7 and changing the admin periodically
-                            println!("Administrator assigned, quitting program");
+                            fs::write("administrator_id.txt", member.user.id.to_string())?;
+
+                            println!("Administrator assigned and saved to file, quitting program");
                             exit(0);
                         }
                         _ => {}
