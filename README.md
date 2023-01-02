@@ -9,7 +9,7 @@ This project will rotate the crown around all the members of a brand new server,
 2) Make an application, then a bot
 3) go get the bot's token, export it into your environment
 4) `cargo run --bin setup`
-5) `cargo run --bin release`
+5) `cargo run --bin switch_admins`
 5) ???
 6) profit
 
