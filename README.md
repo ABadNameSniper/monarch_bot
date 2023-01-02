@@ -8,10 +8,10 @@ This project will rotate the crown around all the members of a brand new server,
 1) go to the Discord developer portal
 2) Make an application, then a bot
 3) go get the bot's token, export it into your environment
-4) cargo run --release
+4) `cargo run --bin setup`
+5) `cargo run --bin release`
 5) ???
 6) profit
 
 ## TODO
-make it actually change the administrator every so often. maybe have a separate binary for that and just schedule systemd to run it like 4 times a day
-also adding more settings for frequency of changing admin, making a list of admins, multiple admins etc.
+add customizability for repeat admins or something
