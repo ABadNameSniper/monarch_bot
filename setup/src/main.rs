@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
         Intents::GUILD_MEMBERS | Intents::GUILDS,
     );
 
-    let client = Client::new(token.to_owned());
+    let mut client = Client::new(token.to_owned());
 
     shard.start().await?;
     println!("Created shard");
@@ -71,30 +71,26 @@ async fn main() -> anyhow::Result<()> {
                         io::stdin()
                             .read_line(&mut response)
                             .expect("Something went wrong reading input");
-            
-                        //let destroy_server = response.eq("RESTART WITH NEW SERVER");
-            
-                        println!("Response: {response}");//, {destroy_server}");//
+
+                        println!("Response: {response}");
 
                         if response.trim() == "RESTART WITH NEW SERVER" {
-                            let discord_response = client
-                                .delete_guild(Id::new_checked(server_id).unwrap())
-                                .await?;
+                            client = delete_old_server(client, &server_id).await?;//this is dumb
+                            //how can i do this without client being mutable
+                            //the compiler complains because client gets used previously in the loop...
+                            //but this isn't really a loop. the program is guaranteed to end at this point?
 
-                            println!("Response from discord: {discord_response:?}");
-                            println!("Destroyed old server!");
-
-                            fs::remove_file("guild_id.txt")?;
-                            fs::remove_file("administrator_id.txt")?;
-                            fs::remove_file("admin_role_id.txt")?;
+                            //wait no the above is false
 
                             File::options().read(true).write(true).create_new(true).open("guild_id.txt")? //better not error pls
+                        } else if response.trim() == "DELETE CURRENT SERVER" {
+                            delete_old_server(client, &server_id).await?;
+
+                            exit(0);
                         } else {
                             println!("Alright, stopping setup execution.");
                             exit(0);
                         }
-                        //panic!("Just deleting rn");
-
                     }
                 };
 
@@ -165,4 +161,21 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+async fn delete_old_server(client: Client, &server_id: &u64) -> anyhow::Result<(Client)> {
+    let discord_response = client
+    .delete_guild(Id::new_checked(server_id).unwrap())
+    .await?;
+
+    println!("Response from discord: {discord_response:?}");
+    println!("Destroyed old server!");
+
+    fs::remove_file("guild_id.txt")?;
+    fs::remove_file("administrator_id.txt")?;
+    fs::remove_file("admin_role_id.txt")?;
+
+    println!("Deleted records of old server");
+
+    Ok(client)
 }
