@@ -1,4 +1,5 @@
 use futures_util::StreamExt;
+use base64::encode;
 use rand::Rng;
 use twilight_http;
 use std::{env, process::exit, fs};
@@ -104,14 +105,66 @@ async fn main() -> anyhow::Result<()> {
                     
                 let new_admin_id = filtered_members[rand::thread_rng().gen_range(0..filtered_members.len())];
 
-                fs::write("administrator_id.txt", new_admin_id.get().to_string())?;
+                let admin_id_string = new_admin_id.get().to_string();
 
-                client.add_guild_member_role(
+                fs::write("administrator_id.txt", &admin_id_string)?;
+
+                /*let partial = */client.add_guild_member_role(
                     guild_id,
                     new_admin_id,
                     admin_role_id
                 ).await?;
-                
+
+                println!("New administrator appointed and ID saved");
+                //can't i just use this partial?
+                //println!("{partial:?}");
+
+                //i'm not sure if i've settled on a format for this stuff.
+                let system_channel_id = client
+                    .guild(guild_id)
+                    .await?
+                    .model()
+                    .await?
+                    .system_channel_id
+                    .expect("No system channel? Is that even possible?");
+                //println!("{system_channel_id.}");
+
+                //let system_channel = client.channel(guild.system_channel_id).await?;
+
+                client
+                    .create_message(system_channel_id)
+                    .content(&format!(
+                        "<@{admin_id_string}>, you are the Administrator for today!"
+                    ))?
+                    .await?;
+
+
+                println!("Pinged administrator in system channel");
+
+                let guild_member = client.guild_member(guild_id, new_admin_id)
+                .await?.model().await?;
+
+                println!("{guild_member:?}");
+
+                let user_id = new_admin_id.get().to_string();
+
+                //through testing i can confirm non-animated user avatars work.
+                let image_url = match guild_member.avatar {
+                    Some(avatar) => format!("https://cdn.discordapp.com/guilds/{guild_id}/users/{user_id}/{avatar}.webp"),
+                    None => match guild_member.user.avatar {
+                        Some(avatar) => format!("https://cdn.discordapp.com/avatars/{user_id}/{avatar}.webp"),
+                        None => format!("https://cdn.discordapp.com/embed/avatars/{}.png", guild_member.user.discriminator.to_string()),
+                    }
+                };
+
+                //let encoded_image = encode(reqwest::blocking::get(image_url)?.bytes()?);
+                let encoded_image = encode(reqwest::get(image_url).await?.bytes().await?);
+
+                let icon = format!("data:image/webp;base64,{encoded_image}");
+
+                client.update_guild(guild_id).icon(Some(&icon)).await?;
+
+                println!("Server icon updated");
 
                 exit(0);
             }
