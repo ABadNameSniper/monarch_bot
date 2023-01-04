@@ -23,3 +23,4 @@ This project will rotate the crown around all the members of a brand new server,
 * ~~change server icon to the administrator's PFP~~
 * bot PFP
 * generate `.service`, `.timer`, and `.sh` files for use in automation, using the setup program.
+* fix setting server icon to avatarless users. make sure it supports animated avatars too
