@@ -80,11 +80,22 @@ async fn main() -> anyhow::Result<()> {
                 */
                 let last_id: Id<UserMarker> = match fs::read_to_string("administrator_id.txt") {
                     Ok(result) => {
-                        client.remove_guild_member_role(
-                            guild_id,
-                            Id::new(result.parse()?),
-                            admin_role_id
-                        ).await?;
+                        // client.remove_guild_member_role(
+                        //     guild_id,
+                        //     Id::new(result.parse()?),
+                        //     admin_role_id
+                        // ).await?;
+
+                        //yes Gabe, I had to remove *all* roles from the previous administrator because of you
+                        //shoutouts for finding a security flaw i guess!
+                        let no_roles: Vec<Id<RoleMarker>> = vec![];
+
+                        client.update_guild_member(
+                            guild_id, Id::new(result.parse()?)
+                        )
+                        .roles(&no_roles)
+                        .await?;
+
                         println!("Removing old administrator");
                         fs::remove_file("administrator_id.txt")?;
                         Id::new(result.parse()?)

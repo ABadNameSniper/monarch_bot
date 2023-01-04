@@ -3,3 +3,5 @@ guild_id.txt
 admin_role_id.txt
 administrator_id.txt
 switch_admins_script.sh
+an_admin_a_day.timer
+an_admin_a_day.service

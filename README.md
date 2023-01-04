@@ -18,7 +18,8 @@ This project will rotate the crown around all the members of a brand new server,
 
 ## TODO
 * add customizability for repeat admins or something
-* scheduling system, for example 8am-8am
-* announce new administrator in channel (or DM new administrator)
-* change server icon to the administrator's PFP
+* ~~scheduling system, for example 8am-8am~~
+* ~~announce new administrator in channel (or DM new administrator)~~
+* ~~change server icon to the administrator's PFP~~
 * bot PFP
+* generate `.service`, `.timer`, and `.sh` files for use in automation, using the setup program.
