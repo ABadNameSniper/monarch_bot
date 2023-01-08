@@ -17,10 +17,12 @@ This project will rotate the crown around all the members of a brand new server,
 4) run setup, and then switch_admins as needed (i have systemd run it once a day)
 
 ## TODO
-* add customizability for repeat admins or something
 * ~~scheduling system, for example 8am-8am~~
 * ~~announce new administrator in channel (or DM new administrator)~~
 * ~~change server icon to the administrator's PFP~~
 * bot PFP
 * generate `.service`, `.timer`, and `.sh` files for use in automation, using the setup program.
 * fix setting server icon to avatarless users. make sure it supports animated avatars too
+  * test this
+* test to see if cycle system works
+* rebrand to "Monarch Bot" or something like that
