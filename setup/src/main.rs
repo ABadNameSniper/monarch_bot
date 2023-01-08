@@ -161,7 +161,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn delete_old_server(client: Client, &server_id: &u64) -> anyhow::Result<(Client)> {
+async fn delete_old_server(client: Client, &server_id: &u64) -> anyhow::Result<Client> {
     let discord_response = client
     .delete_guild(Id::new_checked(server_id).unwrap())
     .await?;
