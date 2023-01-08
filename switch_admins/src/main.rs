@@ -11,7 +11,7 @@ use twilight_model::{
             Activity, ActivityType, MinimalActivity, Status
         }
     }, 
-    id::{Id, marker::{UserMarker, GuildMarker, RoleMarker}},
+    id::{Id, marker::{UserMarker, GuildMarker}}, guild::Permissions,
 };
 use twilight_http::Client;
 
@@ -41,8 +41,8 @@ async fn main() -> anyhow::Result<()> {
                     .await?;
 
                 println!("bah humbug");
-                let guild_members = guild.members.to_owned();
-                println!("{guild_members:?}");
+                // let guild_members = guild.members.to_owned();
+                // println!("{guild_members:?}");
 
                 
             }
@@ -70,34 +70,56 @@ async fn main() -> anyhow::Result<()> {
                 //let mut filtered_members: Vec<Id<UserMarker>> = Vec::new();
 
                 let guild_id: Id<GuildMarker> = fs::read_to_string("guild_id.txt")?.parse()?;
-                let admin_role_id: Id<RoleMarker> = fs::read_to_string("admin_role_id.txt")?.parse()?;
+                //let admin_role_id: Id<RoleMarker> = fs::read_to_string("admin_role_id.txt")?.parse()?;
                 println!("Got server and role IDs");
 
+                let guild = client
+                    .guild(guild_id)
+                    .await?
+                    .model()
+                    .await?;
+
+                let roles_vec = guild.roles;
+
+                let default_permissions: Permissions = 
+                Permissions::CREATE_INVITE | Permissions::READ_MESSAGE_HISTORY | Permissions::SPEAK | Permissions::VIEW_CHANNEL |
+                Permissions::CONNECT | Permissions::ATTACH_FILES | Permissions::SEND_MESSAGES | Permissions::SEND_MESSAGES_IN_THREADS |
+                Permissions::ADD_REACTIONS | Permissions::CHANGE_NICKNAME | Permissions::STREAM | Permissions::CREATE_PUBLIC_THREADS |
+                Permissions::USE_EXTERNAL_STICKERS | Permissions::USE_EMBEDDED_ACTIVITIES | Permissions::USE_EXTERNAL_EMOJIS | Permissions::USE_EXTERNAL_STICKERS;
+
+                //consider giving @everyone the default permissions, while removing all permissions from other roles.
+                //would that work? would that even be useful? i have no idea -- but that is an idea!
+
+                let admin_role_id = Id::new(
+                    fs::read_to_string("admin_role_id.txt").expect("Couldn't read admin role id file!").parse()?
+                );                
+
+                println!("Guild permissions: {:?}", guild.permissions);
+
+                for role in roles_vec {
+                    if role.id.ne(&admin_role_id) {
+                        println!("{} with id {}", role.name, role.id);
+                        client
+                            .update_role(guild_id, role.id)
+                            .permissions(default_permissions)//i can't figure out how to make it "no permissions"
+                            .await?;                    //so i'll leave it with just this one, the default.    
+                        //this shouldn't wait to be syncrhonous, but i can't figure out how to get things to work without doing this
+                        //wasn't there like a command function?
+                        //anyway making this part asynchronous is on the TODO list.
+
+                        
+                    }
+                    
+                }
 
                 /*
                 Two ideas: set id to 0000000001 or something that will never evaluate to true OR
                 two functions for determining new admin based on whether there was an old one found.
                 */
+                
                 match fs::read_to_string("administrator_id.txt") {
                     Ok(result) => {
-                        // client.remove_guild_member_role(
-                        //     guild_id,
-                        //     Id::new(result.parse()?),
-                        //     admin_role_id
-                        // ).await?;
-
-                        //yes Gabe, I had to remove *all* roles from the previous administrator because of you
-                        //shoutouts for finding a security flaw i guess!
-
-                        //update: i'm just going to have to strip all roles of all permissions to make roles cosmetic. (except The Administrator role)
-                        //maybe even have to remove all channel role permissions. yikes. i'll do that later.
-                        let no_roles: Vec<Id<RoleMarker>> = vec![];
-
-                        client.update_guild_member(
-                            guild_id, Id::new(result.parse()?)
-                        )
-                        .roles(&no_roles)
-                        .await?;
+                        client.remove_guild_member_role(guild_id, Id::new(result.parse()?), admin_role_id).await?;
 
                         println!("Removed old administrator");
                         fs::remove_file("administrator_id.txt")?;
@@ -105,11 +127,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(_error) => ()
                 };
 
-                let system_channel_id = client
-                    .guild(guild_id)
-                    .await?
-                    .model()
-                    .await?
+                let system_channel_id = guild
                     .system_channel_id
                     .expect("No system channel? Is that even possible?");
 
@@ -140,17 +158,20 @@ async fn main() -> anyhow::Result<()> {
 
                 let remove_admin_index = rand::thread_rng().gen_range(0..filtered_members.len());
                 
-                let new_admin_id = filtered_members[remove_admin_index];
+                let new_admin_id = filtered_members.swap_remove(remove_admin_index);
                 
-                let filtered_members_json = serde_json::to_string(&filtered_members.swap_remove(remove_admin_index))?;
+                println!("{:?}", &filtered_members);
+
                 if filtered_members.len() > 0 {
+                    let filtered_members_json = serde_json::to_string(&filtered_members)?;
+                    println!("Saving list of everyone else {:?}", {&filtered_members_json});
                     fs::write("remaining_admins.json", filtered_members_json)?;
-                    println!("Saved list of everyone else");
                 } else {
+                    fs::remove_file("remaining_admins.json")?;
                     println!("Out of admins! Will generate new list next cycle!")
                 }
 
-                
+
                 let admin_id_string = new_admin_id.get().to_string();
                 fs::write("administrator_id.txt", &admin_id_string)?;
                 /*let partial = */client.add_guild_member_role(
