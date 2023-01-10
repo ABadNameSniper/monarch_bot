@@ -85,7 +85,8 @@ async fn main() -> anyhow::Result<()> {
                 Permissions::CREATE_INVITE | Permissions::READ_MESSAGE_HISTORY | Permissions::SPEAK | Permissions::VIEW_CHANNEL |
                 Permissions::CONNECT | Permissions::ATTACH_FILES | Permissions::SEND_MESSAGES | Permissions::SEND_MESSAGES_IN_THREADS |
                 Permissions::ADD_REACTIONS | Permissions::CHANGE_NICKNAME | Permissions::STREAM | Permissions::CREATE_PUBLIC_THREADS |
-                Permissions::USE_EXTERNAL_STICKERS | Permissions::USE_EMBEDDED_ACTIVITIES | Permissions::USE_EXTERNAL_EMOJIS | Permissions::USE_EXTERNAL_STICKERS;
+                Permissions::USE_EXTERNAL_STICKERS | Permissions::USE_EMBEDDED_ACTIVITIES | Permissions::USE_EXTERNAL_EMOJIS | 
+                Permissions::EMBED_LINKS | Permissions::USE_VAD;
 
                 //consider giving @everyone the default permissions, while removing all permissions from other roles.
                 //would that work? would that even be useful? i have no idea -- but that is an idea!
