@@ -20,10 +20,9 @@ This project will rotate the crown around all the members of a brand new server,
 * ~~scheduling system, for example 8am-8am~~
 * ~~announce new administrator in channel (or DM new administrator)~~
 * ~~change server icon to the administrator's PFP~~
-* generate `.service`, `.timer`, and `.sh` files for use in automation, using the setup program.
+* generate `.service`, `.timer`, and `.sh` files for use in automation, using the setup program. maybe a .bat if i can figure out a timer system for windows
 * fix setting server icon to avatarless users. make sure it supports animated avatars too
   * test this
-* test to see if cycle system works
 * rebrand to "Monarch Bot" or something like that
   * bot PFP
-* make sure it doesn't break if it tries to make someone who left the server the administrator
+* check to see if everyone on list is still in the server before changing monarch
