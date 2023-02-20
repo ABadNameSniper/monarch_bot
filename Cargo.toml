@@ -1,3 +1,3 @@
 [workspace]
-members = ["setup", "switch_admins"]
-default-members = ["setup", "switch_admins"]
+members = ["setup", "switch_monarch"]
+default-members = ["setup", "switch_monarch"]

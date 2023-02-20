@@ -117,23 +117,23 @@ async fn main() -> anyhow::Result<()> {
 
                 println!("Invite code: discord.gg/{new_invite_code}");
 
-                let admin_permission = Permissions::ADMINISTRATOR;
+                let monarch_permission = Permissions::ADMINISTRATOR;
 
-                let admin_role = client.create_role(new_guild.id)
-                    .name("The Administrator")
-                    .permissions(admin_permission)
+                let monarch_role = client.create_role(new_guild.id)
+                    .name("The Monarch")
+                    .permissions(monarch_permission)
                     .await?;
 
-                let admin_role_id = admin_role.model().await?.id;
+                let monarch_role_id = monarch_role.model().await?.id;
 
                 //TODO
-                // wait for everyone to join the server, have slash command to start the administration
+                // wait for everyone to join the server, have slash command to start the monarchistration
                 // (destroy slash command after use)
                 // include options like period of role changing
 
-                println!("Administrator role created. Waiting for first person to join");
+                println!("Monarch role created. Waiting for first person to join");
 
-                fs::write("admin_role_id.txt", admin_role_id.get().to_string())?;
+                fs::write("monarch_role_id.txt", monarch_role_id.get().to_string())?;
                 println!("Admin role saved to file");
 
                 while let Some(event) = events.next().await {
@@ -142,10 +142,10 @@ async fn main() -> anyhow::Result<()> {
                             let _member = client.add_guild_member_role(
                                 new_guild.id, 
                                 member.user.id,
-                                admin_role_id
+                                monarch_role_id
                             ).await;
 
-                            fs::write("administrator_id.txt", member.user.id.to_string())?;
+                            fs::write("monarch_user_id.txt", member.user.id.to_string())?;
 
                             println!("Administrator assigned and saved to file, quitting program");
                             exit(0);
@@ -170,8 +170,8 @@ async fn delete_old_server(client: Client, &server_id: &u64) -> anyhow::Result<C
     println!("Destroyed old server!");
 
     fs::remove_file("guild_id.txt")?;
-    fs::remove_file("administrator_id.txt")?;
-    fs::remove_file("admin_role_id.txt")?;
+    fs::remove_file("monarch_user_id.txt")?;
+    fs::remove_file("monarch_role_id.txt")?;
 
     println!("Deleted records of old server");
 

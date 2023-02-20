@@ -52,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
 
                 let minimal_activity = MinimalActivity {
                     kind: ActivityType::Playing,
-                    name: "Replacing the administrator...".to_owned(),
+                    name: "Replacing the monarch...".to_owned(),
                     url: None,
                 };
                 let _command = UpdatePresence::new(
@@ -67,10 +67,7 @@ async fn main() -> anyhow::Result<()> {
                 let chunk_members = chunk.to_owned().members;
                 println!("Recieved members!");
 
-                //let mut filtered_members: Vec<Id<UserMarker>> = Vec::new();
-
                 let guild_id: Id<GuildMarker> = fs::read_to_string("guild_id.txt")?.parse()?;
-                //let admin_role_id: Id<RoleMarker> = fs::read_to_string("admin_role_id.txt")?.parse()?;
                 println!("Got server and role IDs");
 
                 let guild = client
@@ -91,14 +88,14 @@ async fn main() -> anyhow::Result<()> {
                 //consider giving @everyone the default permissions, while removing all permissions from other roles.
                 //would that work? would that even be useful? i have no idea -- but that is an idea!
 
-                let admin_role_id = Id::new(
-                    fs::read_to_string("admin_role_id.txt").expect("Couldn't read admin role id file!").parse()?
+                let monarch_role_id = Id::new(
+                    fs::read_to_string("monarch_role_id.txt").expect("Couldn't read monarch role id file!").parse()?
                 );                
 
                 println!("Guild permissions: {:?}", guild.permissions);
 
                 for role in roles_vec {
-                    if role.id.ne(&admin_role_id) {
+                    if role.id.ne(&monarch_role_id) {
                         println!("{} with id {}", role.name, role.id);
                         client
                             .update_role(guild_id, role.id)
@@ -115,15 +112,15 @@ async fn main() -> anyhow::Result<()> {
 
                 /*
                 Two ideas: set id to 0000000001 or something that will never evaluate to true OR
-                two functions for determining new admin based on whether there was an old one found.
+                two functions for determining new monarch based on whether there was an old one found.
                 */
                 
-                match fs::read_to_string("administrator_id.txt") {
+                match fs::read_to_string("monarch_user_id.txt") {
                     Ok(result) => {
-                        client.remove_guild_member_role(guild_id, Id::new(result.parse()?), admin_role_id).await?;
+                        client.remove_guild_member_role(guild_id, Id::new(result.parse()?), monarch_role_id).await?;
 
-                        println!("Removed old administrator");
-                        fs::remove_file("administrator_id.txt")?;
+                        println!("Removed old monarch");
+                        fs::remove_file("monarch_user_id.txt")?;
                     },
                     Err(_error) => ()
                 };
@@ -132,7 +129,7 @@ async fn main() -> anyhow::Result<()> {
                     .system_channel_id
                     .expect("No system channel? Is that even possible?");
 
-                let mut filtered_members: Vec<Id<UserMarker>> = match File::open("remaining_admins.json") {
+                let mut filtered_members: Vec<Id<UserMarker>> = match File::open("remaining_monarchs.json") {
                     Ok(mut file) => {
                         let mut contents = Vec::new();
                         file.read_to_end(&mut contents).expect("Error reading file");
@@ -151,54 +148,53 @@ async fn main() -> anyhow::Result<()> {
                                 all_members.push(id);
                             }
                         }
-                        // let all_members_json = serde_json::to_string(&all_members).unwrap();
-                        // fs::write("remaining_admins.json", all_members_json).unwrap();
+
                         all_members
                     }
                 };
 
-                let remove_admin_index = rand::thread_rng().gen_range(0..filtered_members.len());
+                let remove_monarch_index = rand::thread_rng().gen_range(0..filtered_members.len());
                 
-                let new_admin_id = filtered_members.swap_remove(remove_admin_index);
+                let new_monarch_id = filtered_members.swap_remove(remove_monarch_index);
                 
                 println!("{:?}", &filtered_members);
 
                 if filtered_members.len() > 0 {
                     let filtered_members_json = serde_json::to_string(&filtered_members)?;
                     println!("Saving list of everyone else {:?}", {&filtered_members_json});
-                    fs::write("remaining_admins.json", filtered_members_json)?;
+                    fs::write("remaining_monarchs.json", filtered_members_json)?;
                 } else {
-                    fs::remove_file("remaining_admins.json")?;
-                    println!("Out of admins! Will generate new list next cycle!")
+                    fs::remove_file("remaining_monarchs.json")?;
+                    println!("Out of monarchs! Will generate new list next cycle!")
                 }
 
 
-                let admin_id_string = new_admin_id.get().to_string();
-                fs::write("administrator_id.txt", &admin_id_string)?;
+                let monarch_id_string = new_monarch_id.get().to_string();
+                fs::write("monarch_user_id.txt", &monarch_id_string)?;
                 /*let partial = */client.add_guild_member_role(
                     guild_id,
-                    new_admin_id,
-                    admin_role_id
+                    new_monarch_id,
+                    monarch_role_id
                 ).await?;
-                println!("New administrator appointed and ID saved");
+                println!("New monarch appointed and ID saved");
                 //can't i just use this partial?
                 //println!("{partial:?}");
 
                 client
                     .create_message(system_channel_id)
                     .content(&format!(
-                        "<@{admin_id_string}>, you are the Administrator for today!"
+                        "<@{monarch_id_string}>, you are the Administrator for today!"
                     ))?
                     .await?;
-                println!("Pinged administrator in system channel");
+                println!("Pinged monarch in system channel");
 
                 let guild_member = client
-                    .guild_member(guild_id, new_admin_id)
+                    .guild_member(guild_id, new_monarch_id)
                     .await?.model().await?;
 
                 println!("{guild_member:?}");
 
-                let user_id = new_admin_id.get().to_string();
+                let user_id = new_monarch_id.get().to_string();
 
                 //through testing i can confirm non-animated user avatars work.
                 let (file_type, image_url) = match guild_member.avatar {
