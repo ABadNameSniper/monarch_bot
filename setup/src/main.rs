@@ -181,6 +181,7 @@ async fn delete_old_server(client: Client, &server_id: &u64) -> anyhow::Result<C
     fs::remove_file("guild_id.txt")?;
     fs::remove_file("monarch_user_id.txt")?;
     fs::remove_file("monarch_role_id.txt")?;
+    fs::remove_file("remaining_monarchs.json")?;
 
     println!("Deleted records of old server");
 
