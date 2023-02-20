@@ -1,7 +1,6 @@
-use futures_util::StreamExt;
 use twilight_http;
 use std::{env, process::exit, fs, fs::*};
-use twilight_gateway::{Event, Intents, Shard};
+use twilight_gateway::{Event, Intents, Shard, ShardId};
 use twilight_model::{
     gateway::{
         payload::outgoing::UpdatePresence,
@@ -22,22 +21,17 @@ async fn main() -> anyhow::Result<()> {
 
     let token = env::var("DISCORD_TOKEN")?;
     // To interact with the gateway we first need to connect to it (with a shard or cluster)
-    let (shard, mut events) = Shard::new(
+
+    let mut shard = Shard::new(
+        ShardId::ONE,
         token.to_owned(),
         Intents::GUILD_MEMBERS | Intents::GUILDS,
     );
 
     let mut client = Client::new(token.to_owned());
 
-    shard.start().await?;
-    println!("Created shard");
-
-    while let Some(event) = events.next().await {
-
-        // i'm not sure if this is the best way to wait for this, but it's what
-        // the example gave me
-
-        match &event {
+    loop { let event = match shard.next_event().await {
+        Ok(event) => match &event {
             Event::Ready(_) => {
 
                 println!("Ready for action!");
@@ -136,27 +130,42 @@ async fn main() -> anyhow::Result<()> {
                 fs::write("monarch_role_id.txt", monarch_role_id.get().to_string())?;
                 println!("Admin role saved to file");
 
-                while let Some(event) = events.next().await {
-                    match &event {
-                        Event::MemberAdd(member) => {
-                            let _member = client.add_guild_member_role(
-                                new_guild.id, 
-                                member.user.id,
-                                monarch_role_id
-                            ).await;
+                //
+                exit(0);
 
-                            fs::write("monarch_user_id.txt", member.user.id.to_string())?;
+                // // I'll call removing this a good thing. I mean, why should the first person
+                // // to join just get owner permissions?
+                // // definitely not because idk how to implement this feature now
+                // while let Some(event) = events.next().await {
+                //     match &event {
+                //         Event::MemberAdd(member) => {
+                //             let _member = client.add_guild_member_role(
+                //                 new_guild.id, 
+                //                 member.user.id,
+                //                 monarch_role_id
+                //             ).await;
 
-                            println!("Administrator assigned and saved to file, quitting program");
-                            exit(0);
-                        }
-                        _ => {}
-                    }
-                }
+                //             fs::write("monarch_user_id.txt", member.user.id.to_string())?;
+
+                //             println!("Administrator assigned and saved to file, quitting program");
+                //             exit(0);
+                //         }
+                //         _ => {}
+                //     }
+                // }
             }
             _ => {}
+        },
+        Err(source) => {
+            tracing::warn!(?source, "error receiving event");
+
+            if source.is_fatal() {
+                break;
+            }
+
+            continue;
         }
-    }
+    }; tracing::debug!(?event, "event"); }
 
     Ok(())
 }

@@ -1,9 +1,8 @@
-use futures_util::StreamExt;
 use base64::encode;
 use rand::Rng;
 use twilight_http;
 use std::{env, process::exit, fs::{self, File}, io::Read};
-use twilight_gateway::{Event, Intents, Shard};
+use twilight_gateway::{Event, Intents, Shard, ShardId};
 use twilight_model::{
     gateway::{
         payload::outgoing::{UpdatePresence, RequestGuildMembers},
@@ -21,19 +20,17 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     let token = env::var("DISCORD_TOKEN")?;
-    // To interact with the gateway we first need to connect to it (with a shard or cluster)
-    let (shard, mut events) = Shard::new(
+
+    let mut shard = Shard::new(
+        ShardId::ONE,
         token.to_owned(),
-        Intents::GUILD_MEMBERS | Intents::GUILDS,
+        Intents::GUILD_MEMBERS | Intents::GUILDS
     );
 
     let client = Client::new(token.to_owned());
 
-    shard.start().await?;
-    println!("Created shard");
-
-    while let Some(event) = events.next().await {
-        match &event {
+    loop { let event = match shard.next_event().await {
+        Ok(event) => match &event {
             Event::GuildCreate(guild) => {
 
                 shard
@@ -139,7 +136,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(_) => {
                         client
                             .create_message(system_channel_id)
-                            .content("The Administration cycle has been completed. Now everyone will get another turn.")?
+                            .content("And so another era of kings and queens has passed. What will this cycle of history bring?")?
                             .await?;
                         let mut all_members = Vec::new();
                         for member in chunk_members {
@@ -183,7 +180,7 @@ async fn main() -> anyhow::Result<()> {
                 client
                     .create_message(system_channel_id)
                     .content(&format!(
-                        "<@{monarch_id_string}>, you are the Administrator for today!"
+                        "<@{monarch_id_string}>, you are the Monarch for today!"
                     ))?
                     .await?;
                 println!("Pinged monarch in system channel");
@@ -217,7 +214,18 @@ async fn main() -> anyhow::Result<()> {
                 exit(0);
             }
             other => {println!("other thing: {other:?}")}
+
+        },
+        Err(source) => {
+            tracing::warn!(?source, "error receiving event");
+
+            if source.is_fatal() {
+                break;
+            }
+
+            continue;
         }
-    }
+    }; tracing::debug!(?event, "event"); }
+
     Ok(())
 }
