@@ -1,4 +1,7 @@
 # monarch_bot
+
+![Profile Picture](monarch_bot_completed_pfp.png)
+
 ## Description
 Can't agree on who should be the server owner? How about everyone?
 
@@ -17,8 +20,6 @@ This project will rotate the crown around all the members of a brand new server,
 4) run setup, and then switch_monarch as needed (i have systemd run it once a day)
 
 ## TODO
-* generate `.service`, `.timer`, and `.sh` files for use in automation, using the setup program. maybe a .bat if i can figure out a timer system for windows
 * fix setting server icon to avatarless users. make sure it supports animated avatars too
   * test this
-* make a PFP for the bot
 * check to see if everyone on list is still in the server before changing monarch

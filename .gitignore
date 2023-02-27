@@ -4,5 +4,3 @@ monarch_role_id.txt
 monarch_user_id.txt
 remaining_monarchs.json
 switch_monarch_script.sh
-monarch_bot.timer
-monarch_bot.service
