@@ -2,6 +2,8 @@
 
 ![Profile Picture](monarch_bot_completed_pfp.png)
 
+[Image by Alien Squid Boi](https://www.instagram.com/alien.squid.boi/)
+
 ## Description
 Can't agree on who should be the server owner? How about everyone?
 
