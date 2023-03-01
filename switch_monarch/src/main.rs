@@ -101,10 +101,8 @@ async fn main() -> anyhow::Result<()> {
                         //this shouldn't wait to be syncrhonous, but i can't figure out how to get things to work without doing this
                         //wasn't there like a command function?
                         //anyway making this part asynchronous is on the TODO list.
-
-                        
+   
                     }
-                    
                 }
 
                 /*
@@ -130,8 +128,24 @@ async fn main() -> anyhow::Result<()> {
                     Ok(mut file) => {
                         let mut contents = Vec::new();
                         file.read_to_end(&mut contents).expect("Error reading file");
-                        let list = serde_json::from_slice::<Vec<Id<UserMarker>>>(&contents)?;
-                        list
+                        //let list = 
+                        // ok so like i could filter all members or just keep trying until i pick an eligible one
+                        // or i could filter all of them every time. If i do it this way, people who leave during a change
+                        // will not be put back on the list until the cycle repeats.
+                        serde_json::from_slice::<Vec<Id<UserMarker>>>(&contents)?
+                        .into_iter()
+                        .filter(
+                            | saved_user_marker| chunk_members.iter().any(
+                                | guild_member| guild_member.user.id.eq(saved_user_marker)
+                            )
+                        )
+                        .collect()
+
+                        // ok so maybe like i should just try to give someone admin because it could fail if all users are fetched
+                        // and then the future admin leaves immediately after.
+                        // yeah, it should probably just try to appoint the monarch and then try again if it fails...
+
+                        //list
                     },
                     Err(_) => {
                         client
@@ -150,7 +164,7 @@ async fn main() -> anyhow::Result<()> {
                     }
                 };
 
-                let remove_monarch_index = rand::thread_rng().gen_range(0..filtered_members.len());
+                let remove_monarch_index = rand::thread_rng().gen_range(0 .. filtered_members.len());
                 
                 let new_monarch_id = filtered_members.swap_remove(remove_monarch_index);
                 
@@ -198,7 +212,7 @@ async fn main() -> anyhow::Result<()> {
                     Some(avatar) => ("webp", format!("https://cdn.discordapp.com/guilds/{guild_id}/users/{user_id}/{avatar}.webp")),
                     None => match guild_member.user.avatar {
                         Some(avatar) => ("webp", format!("https://cdn.discordapp.com/avatars/{user_id}/{avatar}.webp")),
-                        None => ("png", format!("https://cdn.discordapp.com/embed/avatars/{}.png", guild_member.user.discriminator.to_string())),
+                        None => ("png", format!("https://cdn.discordapp.com/embed/avatars/{}.png", guild_member.user.discriminator % 5)),//as per discord
                     }
                 };
 
