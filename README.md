@@ -22,5 +22,5 @@ This project will rotate the crown around all the members of a brand new server,
 4) run setup, and then switch_monarch as needed (i have systemd run it once a day)
 
 ## TODO
-test animated/no avatar server icons
-change "presence-assurance" method from checking if everyone on the list is in the server to retrying if selected monarch is not in the server
+* test animated/no avatar server icons
+* change "presence-assurance" method from checking if everyone on the list is in the server to retrying if selected monarch is not in the server
