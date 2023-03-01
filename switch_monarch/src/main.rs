@@ -32,16 +32,9 @@ async fn main() -> anyhow::Result<()> {
     loop { let event = match shard.next_event().await {
         Ok(event) => match &event {
             Event::GuildCreate(guild) => {
-
                 shard
                     .command(&RequestGuildMembers::builder(guild.id).query("", None))
                     .await?;
-
-                println!("bah humbug");
-                // let guild_members = guild.members.to_owned();
-                // println!("{guild_members:?}");
-
-                
             }
             Event::Ready(_) => {
 
@@ -191,6 +184,9 @@ async fn main() -> anyhow::Result<()> {
                 //can't i just use this partial?
                 //println!("{partial:?}");
 
+                //TODO: this is the point where if you're unable to give the role
+                // try again 
+
                 client
                     .create_message(system_channel_id)
                     .content(&format!(
@@ -207,7 +203,7 @@ async fn main() -> anyhow::Result<()> {
 
                 let user_id = new_monarch_id.get().to_string();
 
-                //through testing i can confirm non-animated user avatars work.
+                //TODO: test animated/no PFP avatars
                 let (file_type, image_url) = match guild_member.avatar {
                     Some(avatar) => ("webp", format!("https://cdn.discordapp.com/guilds/{guild_id}/users/{user_id}/{avatar}.webp")),
                     None => match guild_member.user.avatar {
