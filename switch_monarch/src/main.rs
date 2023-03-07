@@ -1,6 +1,5 @@
 use base64::encode;
 use rand::Rng;
-use twilight_http;
 use std::{env, process::exit, fs::{self, File}, io::Read};
 use twilight_gateway::{Event, Intents, Shard, ShardId};
 use twilight_model::{
@@ -13,6 +12,8 @@ use twilight_model::{
     id::{Id, marker::{UserMarker, GuildMarker}}, guild::Permissions,
 };
 use twilight_http::Client;
+
+const CDN_WEBSITE: &str = "https://cdn.discordapp.com";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -148,7 +149,7 @@ async fn main() -> anyhow::Result<()> {
                         let mut all_members = Vec::new();
                         for member in chunk_members {
                             let id = member.user.id;
-                            if member.user.bot == false {
+                            if !member.user.bot {
                                 all_members.push(id);
                             }
                         }
@@ -163,7 +164,7 @@ async fn main() -> anyhow::Result<()> {
                 
                 println!("{:?}", &filtered_members);
 
-                if filtered_members.len() > 0 {
+                if !filtered_members.is_empty() {
                     let filtered_members_json = serde_json::to_string(&filtered_members)?;
                     println!("Saving list of everyone else {:?}", {&filtered_members_json});
                     fs::write("remaining_monarchs.json", filtered_members_json)?;
@@ -204,16 +205,15 @@ async fn main() -> anyhow::Result<()> {
                 let user_id = new_monarch_id.get().to_string();
 
                 //TODO: test animated/no PFP avatars
-                let (file_type, image_url) = match guild_member.avatar {
-                    Some(avatar) => ("webp", format!("https://cdn.discordapp.com/guilds/{guild_id}/users/{user_id}/{avatar}.webp")),
+                let (file_type, image_path) = match guild_member.avatar {
+                    Some(avatar) => (if avatar.is_animated() {"gif"} else {"webp"}, format!("guilds/{guild_id}/users/{user_id}/{avatar}")),
                     None => match guild_member.user.avatar {
-                        Some(avatar) => ("webp", format!("https://cdn.discordapp.com/avatars/{user_id}/{avatar}.webp")),
-                        None => ("png", format!("https://cdn.discordapp.com/embed/avatars/{}.png", guild_member.user.discriminator % 5)),//as per discord
+                        Some(avatar) => (if avatar.is_animated() {"gif"} else {"webp"}, format!("avatars/{user_id}/{avatar}")),
+                        None => ("png", format!("embed/avatars/{}", guild_member.user.discriminator % 5)),//as per discord
                     }
                 };
 
-                //let encoded_image = encode(reqwest::blocking::get(image_url)?.bytes()?);
-                let encoded_image = encode(reqwest::get(image_url).await?.bytes().await?);
+                let encoded_image = encode(reqwest::get(format!("{CDN_WEBSITE}/{image_path}.{file_type}")).await?.bytes().await?);
                 //hopefully setting the file type makes it work with unset profile pictures. i'll still need to do testing with .gifs...
                 let icon = format!("data:image/{file_type};base64,{encoded_image}");
 
