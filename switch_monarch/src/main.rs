@@ -1,19 +1,57 @@
 use base64::encode;
 use rand::Rng;
-use std::{env, process::exit, fs::{self, File}, io::Read};
-use twilight_gateway::{Event, Intents, Shard, ShardId};
+use std::{
+    env, 
+    process::exit, 
+    fs::{
+        self, 
+        File
+    }, 
+    io::Read
+};
+use twilight_gateway::{
+    Event, 
+    Intents, 
+    Shard, 
+    ShardId
+};
 use twilight_model::{
     gateway::{
-        payload::outgoing::{UpdatePresence, RequestGuildMembers},
+        payload::outgoing::{
+            UpdatePresence, 
+            RequestGuildMembers
+        },
         presence::{
-            Activity, ActivityType, MinimalActivity, Status
+            Activity, 
+            ActivityType, 
+            MinimalActivity, 
+            Status
         }
     }, 
-    id::{Id, marker::{UserMarker, GuildMarker}}, guild::Permissions,
+    id::{
+        Id, 
+        marker::{
+            UserMarker, 
+            GuildMarker
+        }
+    }, 
+    guild::{
+        Permissions,
+    }
 };
 use twilight_http::Client;
 
 const CDN_WEBSITE: &str = "https://cdn.discordapp.com";
+
+//yucky bits stuff. remedy ASAP (not supported in twilight yet)
+const DEFAULT_PERMISSIONS: Permissions = Permissions::from_bits_truncate(
+    Permissions::CREATE_INVITE.bits() | Permissions::READ_MESSAGE_HISTORY.bits() | Permissions::SPEAK.bits() | Permissions::VIEW_CHANNEL.bits() |
+    Permissions::CONNECT.bits() | Permissions::ATTACH_FILES.bits() | Permissions::SEND_MESSAGES.bits() | Permissions::SEND_MESSAGES_IN_THREADS.bits() |
+    Permissions::ADD_REACTIONS.bits() | Permissions::CHANGE_NICKNAME.bits() | Permissions::STREAM.bits() | Permissions::CREATE_PUBLIC_THREADS.bits() |
+    Permissions::USE_EXTERNAL_STICKERS.bits() | Permissions::USE_EMBEDDED_ACTIVITIES.bits() | Permissions::USE_EXTERNAL_EMOJIS.bits() | 
+    Permissions::EMBED_LINKS.bits() | Permissions::USE_VAD.bits()
+);
+
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -69,13 +107,6 @@ async fn main() -> anyhow::Result<()> {
 
                 let roles_vec = guild.roles;
 
-                let default_permissions: Permissions = 
-                Permissions::CREATE_INVITE | Permissions::READ_MESSAGE_HISTORY | Permissions::SPEAK | Permissions::VIEW_CHANNEL |
-                Permissions::CONNECT | Permissions::ATTACH_FILES | Permissions::SEND_MESSAGES | Permissions::SEND_MESSAGES_IN_THREADS |
-                Permissions::ADD_REACTIONS | Permissions::CHANGE_NICKNAME | Permissions::STREAM | Permissions::CREATE_PUBLIC_THREADS |
-                Permissions::USE_EXTERNAL_STICKERS | Permissions::USE_EMBEDDED_ACTIVITIES | Permissions::USE_EXTERNAL_EMOJIS | 
-                Permissions::EMBED_LINKS | Permissions::USE_VAD;
-
                 //consider giving @everyone the default permissions, while removing all permissions from other roles.
                 //would that work? would that even be useful? i have no idea -- but that is an idea!
 
@@ -90,7 +121,7 @@ async fn main() -> anyhow::Result<()> {
                         println!("{} with id {}", role.name, role.id);
                         client
                             .update_role(guild_id, role.id)
-                            .permissions(default_permissions)//i can't figure out how to make it "no permissions"
+                            .permissions(DEFAULT_PERMISSIONS)//i can't figure out how to make it "no permissions"
                             .await?;                    //so i'll leave it with just this one, the default.    
                         //this shouldn't wait to be syncrhonous, but i can't figure out how to get things to work without doing this
                         //wasn't there like a command function?
@@ -106,6 +137,7 @@ async fn main() -> anyhow::Result<()> {
                 
                 match fs::read_to_string("monarch_user_id.txt") {
                     Ok(result) => {
+                        //i'm going to assume this just carries on if the member left the gulid already
                         client.remove_guild_member_role(guild_id, Id::new(result.parse()?), monarch_role_id).await?;
 
                         println!("Removed old monarch");
@@ -127,13 +159,13 @@ async fn main() -> anyhow::Result<()> {
                         // or i could filter all of them every time. If i do it this way, people who leave during a change
                         // will not be put back on the list until the cycle repeats.
                         serde_json::from_slice::<Vec<Id<UserMarker>>>(&contents)?
-                        .into_iter()
-                        .filter(
-                            | saved_user_marker| chunk_members.iter().any(
-                                | guild_member| guild_member.user.id.eq(saved_user_marker)
-                            )
-                        )
-                        .collect()
+                        // .into_iter()
+                        // .filter(
+                        //     | saved_user_marker| chunk_members.iter().any(
+                        //         | guild_member| guild_member.user.id.eq(saved_user_marker)
+                        //     )
+                        // )
+                        // .collect()
 
                         // ok so maybe like i should just try to give someone admin because it could fail if all users are fetched
                         // and then the future admin leaves immediately after.
@@ -158,35 +190,49 @@ async fn main() -> anyhow::Result<()> {
                     }
                 };
 
-                let remove_monarch_index = rand::thread_rng().gen_range(0 .. filtered_members.len());
+                #[allow(unused)]
+                let mut new_monarch_id: Id<UserMarker> = Id::new(0);
                 
-                let new_monarch_id = filtered_members.swap_remove(remove_monarch_index);
-                
-                println!("{:?}", &filtered_members);
+                let eligible_member_count = filtered_members.len();
 
-                if !filtered_members.is_empty() {
-                    let filtered_members_json = serde_json::to_string(&filtered_members)?;
-                    println!("Saving list of everyone else {:?}", {&filtered_members_json});
-                    fs::write("remaining_monarchs.json", filtered_members_json)?;
-                } else {
-                    fs::remove_file("remaining_monarchs.json")?;
-                    println!("Out of monarchs! Will generate new list next cycle!")
-                }
+                let mut countdown = eligible_member_count;
 
+                loop {
+
+                    let remove_monarch_index = rand::thread_rng().gen_range(0 .. eligible_member_count);
+                    
+                    new_monarch_id = filtered_members.swap_remove(remove_monarch_index);
+                    
+                    println!("{:?}", &filtered_members);
+
+                    if !filtered_members.is_empty() {
+                        let filtered_members_json = serde_json::to_string(&filtered_members)?;
+                        println!("Saving list of everyone else {:?}", {&filtered_members_json});
+                        fs::write("remaining_monarchs.json", filtered_members_json)?;
+                    } else {
+                        fs::remove_file("remaining_monarchs.json")?;
+                        println!("Out of monarchs! Will generate new list next cycle!")
+                    }
+
+                    match client.add_guild_member_role(guild_id, new_monarch_id, monarch_role_id).await {
+                        Ok(res) => {
+                            println!("{res:?}, {}", res.status());
+                            break;
+                        }
+                        Err(err) => {
+                            println!("{err}");
+                            if countdown == 0 {
+                                panic!("Could not find a suitable monarch!");
+                            }
+                            countdown -= 1;
+                        }
+                    }
+                };
 
                 let monarch_id_string = new_monarch_id.get().to_string();
                 fs::write("monarch_user_id.txt", &monarch_id_string)?;
-                /*let partial = */client.add_guild_member_role(
-                    guild_id,
-                    new_monarch_id,
-                    monarch_role_id
-                ).await?;
-                println!("New monarch appointed and ID saved");
-                //can't i just use this partial?
-                //println!("{partial:?}");
 
-                //TODO: this is the point where if you're unable to give the role
-                // try again 
+                println!("New monarch appointed and ID saved");
 
                 client
                     .create_message(system_channel_id)
