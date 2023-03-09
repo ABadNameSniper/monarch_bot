@@ -1,7 +1,6 @@
 use base64::encode;
 use rand::Rng;
 use std::{
-    env, 
     process::exit, 
     fs::{
         self, 
@@ -58,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
     // Initialize the tracing subscriber.
     tracing_subscriber::fmt::init();
 
-    let token = env::var("DISCORD_TOKEN")?;
+    let token = fs::read_to_string("bot_token.txt")?;
 
     let mut shard = Shard::new(
         ShardId::ONE,
@@ -138,7 +137,12 @@ async fn main() -> anyhow::Result<()> {
                 match fs::read_to_string("monarch_user_id.txt") {
                     Ok(result) => {
                         //i'm going to assume this just carries on if the member left the gulid already
-                        client.remove_guild_member_role(guild_id, Id::new(result.parse()?), monarch_role_id).await?;
+                        match client.remove_guild_member_role(guild_id, Id::new(result.parse()?), monarch_role_id).await {
+                            Ok(_) => (),
+                            Err(err) => {
+                                println!("Could not remove old monarch. Reason: {err}")
+                            }
+                        };
 
                         println!("Removed old monarch");
                         fs::remove_file("monarch_user_id.txt")?;
@@ -199,6 +203,7 @@ async fn main() -> anyhow::Result<()> {
 
                 loop {
 
+                    //panics on empty server
                     let remove_monarch_index = rand::thread_rng().gen_range(0 .. eligible_member_count);
                     
                     new_monarch_id = filtered_members.swap_remove(remove_monarch_index);
@@ -210,17 +215,23 @@ async fn main() -> anyhow::Result<()> {
                         println!("Saving list of everyone else {:?}", {&filtered_members_json});
                         fs::write("remaining_monarchs.json", filtered_members_json)?;
                     } else {
-                        fs::remove_file("remaining_monarchs.json")?;
-                        println!("Out of monarchs! Will generate new list next cycle!")
+                        println!("Out of monarchs! Will generate new list next cycle!");
+                        match fs::remove_file("remaining_monarchs.json") {
+                            Ok(_res) => {
+
+                            }
+                            Err(err) => {
+                                println!("We had an error removing the file: {err}");
+                            }
+                        }
                     }
 
-                    match client.add_guild_member_role(guild_id, new_monarch_id, monarch_role_id).await {
-                        Ok(res) => {
-                            println!("{res:?}, {}", res.status());
+                    match client.add_guild_member_role(guild_id, new_monarch_id, monarch_role_id).await?.status().is_success() {
+                        true => {
                             break;
                         }
-                        Err(err) => {
-                            println!("{err}");
+                        false => {
+                            println!("Failed to appoint monarch");
                             if countdown == 0 {
                                 panic!("Could not find a suitable monarch!");
                             }

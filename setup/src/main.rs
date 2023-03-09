@@ -1,5 +1,4 @@
-use twilight_http;
-use std::{env, process::exit, fs, fs::*};
+use std::{process::exit, fs, fs::*};
 use twilight_gateway::{Event, Intents, Shard, ShardId};
 use twilight_model::{
     gateway::{
@@ -16,11 +15,71 @@ use std::io;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+
+    let mut new_guild = true;
+    //I don't know which is better. Mutable varialbes, or returning them in a match
+    let (delete_guild, server_id): (bool, u64) = match File::options().read(true).write(true).create_new(true).open("guild_id.txt") {
+        Ok(_/*mut file*/) => {
+            // let mut buf = String::new();
+            // file.read_to_string(&mut buf)?;
+            //(false, buf.parse::<u64>().unwrap())
+            (false, 0) //chatchpt said default values are ok
+        },
+        Err(_) => {
+            let server_id: u64 = fs::read_to_string("guild_id.txt")?.parse().expect("Couldn't parse file. Do you have a valid guild id?");
+
+            println!("Looks like you already have a server. Press enter to continue or \"RESTART WITH NEW SERVER\" to restart with a new server. \"DELETE CURRENT SERVER\" will destroy the current server without creating a new one.");
+
+            let mut response = String::new();
+
+            io::stdin()
+                .read_line(&mut response)
+                .expect("Something went wrong reading input");
+
+            println!("Response: {response}");
+
+            let delete_guild = match response.trim() {
+                "RESTART WITH NEW SERVER" => {
+                    true
+                },
+                "DELETE CURRENT SERVER" => {
+                    new_guild = false;
+                    true
+                },
+                _ => {
+                    println!("Alright, stopping setup execution.");
+                    exit(0);
+                }
+            };
+
+            (delete_guild, server_id)
+        }
+    };
+
+    // let token = env::var("DISCORD_TOKEN")?;
+    // To interact with the gateway we first need to connect to it (with a shard or cluster)
+
+    let token = match fs::read_to_string("bot_token.txt") {
+        Ok(result) => result,
+        Err(_) => {
+            println!("You'll need to save your bot token to run the program automatically. Paste it here and it will get saved to bot_token.txt");
+
+            let mut response = String::new();
+            
+            io::stdin()
+                .read_line(&mut response)
+                .expect("Something went wrong reading input");
+
+            response = response.trim().to_string();
+
+            fs::write("bot_token.txt", &response)?;
+
+            response
+        }
+    };
+
     // Initialize the tracing subscriber.
     tracing_subscriber::fmt::init();
-
-    let token = env::var("DISCORD_TOKEN")?;
-    // To interact with the gateway we first need to connect to it (with a shard or cluster)
 
     let mut shard = Shard::new(
         ShardId::ONE,
@@ -38,7 +97,7 @@ async fn main() -> anyhow::Result<()> {
 
                 let minimal_activity = MinimalActivity {
                     kind: ActivityType::Playing,
-                    name: "Setting up a brand new server!".to_owned(),
+                    name: if new_guild {"Setting up a brand new server!".to_owned()} else {"Deleting old server... Goodbye.".to_owned()},
                     url: None,
                 };
                 let command = UpdatePresence::new(
@@ -51,40 +110,13 @@ async fn main() -> anyhow::Result<()> {
                 shard.command(&command).await?;
                 println!("Status set!");
 
-                let _new_file = match File::options().read(true).write(true).create_new(true).open("guild_id.txt") {
-                    Ok(file) => file,
-                    Err(_) => {
-                        let server_id: u64 = fs::read_to_string("guild_id.txt")?.parse().expect("Couldn't read guild_id.txt");
-
-                        println!("Looks like you already have a server. Press enter to continue or \"RESTART WITH NEW SERVER\" to restart with a new server.");
-            
-                        let mut response = String::new();
-            
-                        io::stdin()
-                            .read_line(&mut response)
-                            .expect("Something went wrong reading input");
-
-                        println!("Response: {response}");
-
-                        if response.trim() == "RESTART WITH NEW SERVER" {
-                            client = delete_old_server(client, &server_id).await?;//this is dumb
-                            //how can i do this without client being mutable
-                            //the compiler complains because client gets used previously in the loop...
-                            //but this isn't really a loop. the program is guaranteed to end at this point?
-
-                            //wait no the above is false
-
-                            File::options().read(true).write(true).create_new(true).open("guild_id.txt")? //better not error pls
-                        } else if response.trim() == "DELETE CURRENT SERVER" {
-                            delete_old_server(client, &server_id).await?;
-
-                            exit(0);
-                        } else {
-                            println!("Alright, stopping setup execution.");
-                            exit(0);
-                        }
+                if delete_guild {
+                    client = delete_old_server(client, &server_id).await?;
+                    if !new_guild {
+                        println!("No new guild... exiting!");
+                        exit(0);
                     }
-                };
+                }
 
                 let new_guild = client
                     .create_guild(String::from("Brand New Server"))
@@ -103,7 +135,7 @@ async fn main() -> anyhow::Result<()> {
                 println!("Guild ID saved");
 
                 // This doesn't return the code
-                let new_invite = client.create_invite(new_system_channel_id).await?;
+                let new_invite = client.create_invite(new_system_channel_id).max_age(0)?.await?;
                 // Get the code from here instead
                 let new_channel_id = new_invite.model().await?.channel.expect("oops no channel").id;
                 let channel_invites = client.channel_invites(new_channel_id).await?;
@@ -153,6 +185,7 @@ async fn main() -> anyhow::Result<()> {
                 //         _ => {}
                 //     }
                 // }
+                
             }
             _ => {}
         },
@@ -172,16 +205,20 @@ async fn main() -> anyhow::Result<()> {
 
 async fn delete_old_server(client: Client, &server_id: &u64) -> anyhow::Result<Client> {
     let discord_response = client
-    .delete_guild(Id::new_checked(server_id).unwrap())
-    .await?;
+        .delete_guild(Id::new_checked(server_id).unwrap())
+        .await?;
 
     println!("Response from discord: {discord_response:?}");
     println!("Destroyed old server!");
 
-    fs::remove_file("guild_id.txt")?;
-    fs::remove_file("monarch_user_id.txt")?;
-    fs::remove_file("monarch_role_id.txt")?;
-    fs::remove_file("remaining_monarchs.json")?;
+    let files = vec!["guild_id.txt", "monarch_user_id.txt", "monarch_role_id.txt", "remaining_monarchs.json"];
+
+    for file in files {
+        match fs::remove_file(file) {
+            Ok(()) => println!("File {} deleted successfully", file),
+            Err(error) => println!("Error deleting file {}: {}", file, error),
+        }
+    }
 
     println!("Deleted records of old server");
 
