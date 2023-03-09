@@ -191,7 +191,7 @@ async fn main() -> anyhow::Result<()> {
                 };
 
                 #[allow(unused)]
-                let mut new_monarch_id: Id<UserMarker> = Id::new(0);
+                let mut new_monarch_id: Id<UserMarker> = Id::new(1);
                 
                 let eligible_member_count = filtered_members.len();
 
