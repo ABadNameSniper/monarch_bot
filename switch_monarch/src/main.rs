@@ -154,78 +154,29 @@ async fn main() -> anyhow::Result<()> {
                     .system_channel_id
                     .expect("No system channel? Is that even possible?");
 
-                let mut filtered_members: Vec<Id<UserMarker>> = match File::open("remaining_monarchs.json") {
-                    Ok(mut file) => {
-                        let mut contents = Vec::new();
-                        file.read_to_end(&mut contents).expect("Error reading file");
-                        //let list = 
-                        // ok so like i could filter all members or just keep trying until i pick an eligible one
-                        // or i could filter all of them every time. If i do it this way, people who leave during a change
-                        // will not be put back on the list until the cycle repeats.
-                        serde_json::from_slice::<Vec<Id<UserMarker>>>(&contents)?
-                        // .into_iter()
-                        // .filter(
-                        //     | saved_user_marker| chunk_members.iter().any(
-                        //         | guild_member| guild_member.user.id.eq(saved_user_marker)
-                        //     )
-                        // )
-                        // .collect()
+                // let mut filtered_members: Vec<Id<UserMarker>> = vec![]
 
-                        // ok so maybe like i should just try to give someone admin because it could fail if all users are fetched
-                        // and then the future admin leaves immediately after.
-                        // yeah, it should probably just try to appoint the monarch and then try again if it fails...
-
-                        //list
-                    },
-                    Err(_) => {
-                        client
-                            .create_message(system_channel_id)
-                            .content("And so another era of kings and queens has passed. What will this cycle of history bring?")?
-                            .await?;
-                        let mut all_members = Vec::new();
-                        for member in chunk_members {
-                            let id = member.user.id;
-                            if !member.user.bot {
-                                all_members.push(id);
-                            }
-                        }
-
-                        all_members
-                    }
-                };
+                let mut filtered_members: Vec<Id<UserMarker>> = get_eligible_members(&client, system_channel_id, &chunk_members).await;
+                let eligible_member_count = filtered_members.len();
+                let mut countdown = eligible_member_count;
 
                 #[allow(unused)]
                 let mut new_monarch_id: Id<UserMarker> = Id::new(1);
                 
-                let eligible_member_count = filtered_members.len();
-
-                let mut countdown = eligible_member_count;
-
                 loop {
 
-                    //panics on empty server
+                    if filtered_members.is_empty() {
+                        filtered_members = get_eligible_members(&client, system_channel_id, &chunk_members).await;
+                        countdown = 0; // there *should* be no reason to retry at this point.
+                    }
+
                     let remove_monarch_index = rand::thread_rng().gen_range(0 .. eligible_member_count);
                     
                     new_monarch_id = filtered_members.swap_remove(remove_monarch_index);
                     
                     println!("{:?}", &filtered_members);
 
-                    if !filtered_members.is_empty() {
-                        let filtered_members_json = serde_json::to_string(&filtered_members)?;
-                        println!("Saving list of everyone else {:?}", {&filtered_members_json});
-                        fs::write("remaining_monarchs.json", filtered_members_json)?;
-                    } else {
-                        println!("Out of monarchs! Will generate new list next cycle!");
-                        match fs::remove_file("remaining_monarchs.json") {
-                            Ok(_res) => {
-
-                            }
-                            Err(err) => {
-                                println!("We had an error removing the file: {err}");
-                            }
-                        }
-                    }
-
+                    //could probably just check for 404 errors instead...
                     match client.add_guild_member_role(guild_id, new_monarch_id, monarch_role_id).await?.status().is_success() {
                         true => {
                             break;
@@ -240,9 +191,12 @@ async fn main() -> anyhow::Result<()> {
                     }
                 };
 
+                let filtered_members_json = serde_json::to_string(&filtered_members)?;
+                println!("Saving list of remaining candidates {:?}", {&filtered_members_json});
+                fs::write("remaining_monarchs.json", filtered_members_json)?;
+
                 let monarch_id_string = new_monarch_id.get().to_string();
                 fs::write("monarch_user_id.txt", &monarch_id_string)?;
-
                 println!("New monarch appointed and ID saved");
 
                 client
@@ -261,17 +215,15 @@ async fn main() -> anyhow::Result<()> {
 
                 let user_id = new_monarch_id.get().to_string();
 
-                //TODO: test animated/no PFP avatars
                 let (file_type, image_path) = match guild_member.avatar {
-                    Some(avatar) => (if avatar.is_animated() {"gif"} else {"webp"}, format!("guilds/{guild_id}/users/{user_id}/{avatar}")),
+                    Some(avatar) => (if avatar.is_animated() {"gif"} else {"webp"}, format!("guilds/{guild_id}/users/{user_id}/avatars/{avatar}")),
                     None => match guild_member.user.avatar {
                         Some(avatar) => (if avatar.is_animated() {"gif"} else {"webp"}, format!("avatars/{user_id}/{avatar}")),
                         None => ("png", format!("embed/avatars/{}", guild_member.user.discriminator % 5)),//as per discord
                     }
                 };
-
                 let encoded_image = encode(reqwest::get(format!("{CDN_WEBSITE}/{image_path}.{file_type}")).await?.bytes().await?);
-                //hopefully setting the file type makes it work with unset profile pictures. i'll still need to do testing with .gifs...
+
                 let icon = format!("data:image/{file_type};base64,{encoded_image}");
 
                 client.update_guild(guild_id).icon(Some(&icon)).await?;
@@ -295,4 +247,44 @@ async fn main() -> anyhow::Result<()> {
     }; tracing::debug!(?event, "event"); }
 
     Ok(())
+}
+
+async fn get_eligible_members(
+    client: &Client, 
+    system_channel_id: Id<twilight_model::id::marker::ChannelMarker>, 
+    chunk_members: &Vec<twilight_model::guild::Member>
+) -> Vec<Id<UserMarker>> {
+    let mut file = File::open("remaining_monarchs.json").unwrap();
+    let mut contents: Vec<u8> = Vec::new();
+    file.read_to_end(&mut contents).unwrap();
+    let mut eligible_members = serde_json::from_slice::<Vec<Id<UserMarker>>>(&contents).unwrap();
+    if eligible_members.is_empty() {
+        client
+            .create_message(system_channel_id)
+            .content("And so another era of kings and queens has passed. What will this cycle of history bring?").unwrap()
+            .await.unwrap();
+        eligible_members = Vec::new();
+        for member in chunk_members {
+            let id = member.user.id;
+            if !member.user.bot {
+                eligible_members.push(id);
+            }
+        }
+    }
+    eligible_members
+    // ok so like i could filter all members or just keep trying until i pick an eligible one
+    // or i could filter all of them every time. If i do it this way, people who leave during a change
+    // will not be put back on the list until the cycle repeats.
+    // //serde_json::from_slice::<Vec<Id<UserMarker>>>(&contents).expect("Could not read into Vec")
+    // .into_iter()
+    // .filter(
+    //     | saved_user_marker| chunk_members.iter().any(
+    //         | guild_member| guild_member.user.id.eq(saved_user_marker)
+    //     )
+    // )
+    // .collect()
+
+    // ok so maybe like i should just try to give someone admin because it could fail if all users are fetched
+    // and then the future admin leaves immediately after.
+    // yeah, it should probably just try to appoint the monarch and then try again if it fails...
 }

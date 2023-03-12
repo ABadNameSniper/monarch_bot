@@ -18,7 +18,3 @@ This project will rotate the crown around all the members of a brand new server,
 ## How to run:
 1) go to the Discord developer portal, make an application, make a bot, and then keep that token handy
 2) run setup from your terminal, and then switch_monarch as needed (i have systemd run it once a day, since i use arch btw, but Cron or Task Scheduler should work just as well)
-
-## TODO
-* test if animated server icons completely break or show a static image
-* clean up detritus code

@@ -162,29 +162,10 @@ async fn main() -> anyhow::Result<()> {
                 fs::write("monarch_role_id.txt", monarch_role_id.get().to_string())?;
                 println!("Admin role saved to file");
 
+                fs::write("remaining_monarchs.json", "")?;
+
                 //
                 exit(0);
-
-                // // I'll call removing this a good thing. I mean, why should the first person
-                // // to join just get owner permissions?
-                // // definitely not because idk how to implement this feature now
-                // while let Some(event) = events.next().await {
-                //     match &event {
-                //         Event::MemberAdd(member) => {
-                //             let _member = client.add_guild_member_role(
-                //                 new_guild.id, 
-                //                 member.user.id,
-                //                 monarch_role_id
-                //             ).await;
-
-                //             fs::write("monarch_user_id.txt", member.user.id.to_string())?;
-
-                //             println!("Administrator assigned and saved to file, quitting program");
-                //             exit(0);
-                //         }
-                //         _ => {}
-                //     }
-                // }
                 
             }
             _ => {}
