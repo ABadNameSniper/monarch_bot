@@ -34,21 +34,27 @@ use twilight_model::{
             GuildMarker
         }
     }, 
-    guild::{
-        Permissions,
-    }
+    guild::Permissions
 };
 use twilight_http::Client;
 
 const CDN_WEBSITE: &str = "https://cdn.discordapp.com";
 
-//yucky bits stuff. remedy ASAP (not supported in twilight yet)
+// I don't know how to separate out creating events and managing them!
 const DEFAULT_PERMISSIONS: Permissions = Permissions::from_bits_truncate(
-    Permissions::CREATE_INVITE.bits() | Permissions::READ_MESSAGE_HISTORY.bits() | Permissions::SPEAK.bits() | Permissions::VIEW_CHANNEL.bits() |
-    Permissions::CONNECT.bits() | Permissions::ATTACH_FILES.bits() | Permissions::SEND_MESSAGES.bits() | Permissions::SEND_MESSAGES_IN_THREADS.bits() |
-    Permissions::ADD_REACTIONS.bits() | Permissions::CHANGE_NICKNAME.bits() | Permissions::STREAM.bits() | Permissions::CREATE_PUBLIC_THREADS.bits() |
-    Permissions::USE_EXTERNAL_STICKERS.bits() | Permissions::USE_EMBEDDED_ACTIVITIES.bits() | Permissions::USE_EXTERNAL_EMOJIS.bits() | 
-    Permissions::EMBED_LINKS.bits() | Permissions::USE_VAD.bits()
+    Permissions::CREATE_INVITE.bits()     | Permissions::ADD_REACTIONS.bits()              | 
+    Permissions::STREAM.bits()                  | Permissions::VIEW_CHANNEL.bits()              | 
+    Permissions::SEND_MESSAGES.bits()           | Permissions::EMBED_LINKS.bits()               | 
+    Permissions::ATTACH_FILES.bits()            | Permissions::READ_MESSAGE_HISTORY.bits()      | 
+    Permissions::MENTION_EVERYONE.bits()        | Permissions::USE_EXTERNAL_EMOJIS.bits()       | 
+    Permissions::CONNECT.bits()                 | Permissions::SPEAK.bits()                     |
+    Permissions::USE_VAD.bits()                 | Permissions::CHANGE_NICKNAME.bits()           | 
+    Permissions::MANAGE_GUILD_EXPRESSIONS.bits()| Permissions::USE_SLASH_COMMANDS.bits()        |
+    Permissions::REQUEST_TO_SPEAK.bits()        | Permissions::MANAGE_EVENTS.bits()             |
+    Permissions::CREATE_PUBLIC_THREADS.bits()   | Permissions::CREATE_PRIVATE_THREADS.bits()    | 
+    Permissions::USE_EXTERNAL_STICKERS.bits()   | Permissions::SEND_MESSAGES_IN_THREADS.bits()  |
+    Permissions::USE_EMBEDDED_ACTIVITIES.bits() | Permissions::USE_SOUNDBOARD.bits()            |
+    Permissions::SEND_VOICE_MESSAGES.bits()     
 );
 
 

@@ -24,7 +24,7 @@ tracing-subscriber = { default-features = false, features = ["fmt", "tracing-log
 twilight-gateway = "*"
 twilight-http = "*"
 twilight-lavalink = "*"
-twilight-model = "*"
+twilight-model = "0.15.2"
 twilight-standby = "*"
 twilight-cache-inmemory = "*"
 futures = "*"
