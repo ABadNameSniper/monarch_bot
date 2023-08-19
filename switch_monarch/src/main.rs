@@ -41,8 +41,11 @@ use twilight_http::Client;
 const CDN_WEBSITE: &str = "https://cdn.discordapp.com";
 
 // I don't know how to separate out creating events and managing them!
+// TODO: create a default permissions file. It literally just needs to be a 64 bitfield/int/whatever.
+// use these as backup (maybe remove @everyone, and managing events/emojis)
 const DEFAULT_PERMISSIONS: Permissions = Permissions::from_bits_truncate(
-    Permissions::CREATE_INVITE.bits()     | Permissions::ADD_REACTIONS.bits()              | 
+    
+    Permissions::CREATE_INVITE.bits()       | Permissions::ADD_REACTIONS.bits()             | 
     Permissions::STREAM.bits()                  | Permissions::VIEW_CHANNEL.bits()              | 
     Permissions::SEND_MESSAGES.bits()           | Permissions::EMBED_LINKS.bits()               | 
     Permissions::ATTACH_FILES.bits()            | Permissions::READ_MESSAGE_HISTORY.bits()      | 
@@ -97,9 +100,20 @@ async fn main() -> anyhow::Result<()> {
                 )?;
 
             }
+            //Not sure if this scales!
             Event::MemberChunk(chunk) => {
-                let chunk_members = chunk.to_owned().members;
+                let eligible_ids: Vec<Id<UserMarker>> = chunk
+                    .to_owned()
+                    .members
+                    .into_iter()
+                    .filter(|member| !member.user.bot)
+                    .map(|member| member.user.id)
+                    .collect();
+                if eligible_ids.is_empty() {
+                    panic!("No eligible monarchs!");
+                }
                 println!("Recieved members!");
+
 
                 let guild_id: Id<GuildMarker> = fs::read_to_string("guild_id.txt")?.parse()?;
                 println!("Got server and role IDs");
@@ -116,7 +130,9 @@ async fn main() -> anyhow::Result<()> {
                 //would that work? would that even be useful? i have no idea -- but that is an idea!
 
                 let monarch_role_id = Id::new(
-                    fs::read_to_string("monarch_role_id.txt").expect("Couldn't read monarch role id file!").parse()?
+                    fs::read_to_string("monarch_role_id.txt")
+                        .expect("Couldn't read monarch role id file!")
+                        .parse()?
                 );                
 
                 println!("Guild permissions: {:?}", guild.permissions);
@@ -131,7 +147,6 @@ async fn main() -> anyhow::Result<()> {
                         //this shouldn't wait to be syncrhonous, but i can't figure out how to get things to work without doing this
                         //wasn't there like a command function?
                         //anyway making this part asynchronous is on the TODO list.
-   
                     }
                 }
 
@@ -146,6 +161,7 @@ async fn main() -> anyhow::Result<()> {
                         match client.remove_guild_member_role(guild_id, Id::new(result.parse()?), monarch_role_id).await {
                             Ok(_) => (),
                             Err(err) => {
+                                //If 404, then continue as normal? It means they've left the server
                                 println!("Could not remove old monarch. Reason: {err}")
                             }
                         };
@@ -160,44 +176,37 @@ async fn main() -> anyhow::Result<()> {
                     .system_channel_id
                     .expect("No system channel? Is that even possible?");
 
-                // let mut filtered_members: Vec<Id<UserMarker>> = vec![]
 
-                let mut filtered_members: Vec<Id<UserMarker>> = get_eligible_members(&client, system_channel_id, &chunk_members).await;
-                let eligible_member_count = filtered_members.len();
-                let mut countdown = eligible_member_count;
+                let mut filtered_ids: Vec<Id<UserMarker>> = get_eligible_members(&client, system_channel_id, &eligible_ids).await;
 
                 #[allow(unused)]
                 let mut new_monarch_id: Id<UserMarker> = Id::new(1);
                 
-                loop {
 
-                    if filtered_members.is_empty() {
-                        filtered_members = get_eligible_members(&client, system_channel_id, &chunk_members).await;
-                        countdown = 0; // there *should* be no reason to retry at this point.
+                new_monarch_id = filtered_ids.swap_remove(
+                    rand::thread_rng().gen_range(0 .. filtered_ids.len())
+                );
+                
+                println!("Selected Monarch: {:?}", &new_monarch_id);
+                println!("{:?}", &filtered_ids);
+
+                //could probably just check for 404 errors instead...
+                match 
+                    client.add_guild_member_role(guild_id, new_monarch_id, monarch_role_id)
+                        .await?
+                        .status()
+                        .is_success() 
+                {
+                    true => {
+                        ();
                     }
-
-                    let remove_monarch_index = rand::thread_rng().gen_range(0 .. eligible_member_count);
-                    
-                    new_monarch_id = filtered_members.swap_remove(remove_monarch_index);
-                    
-                    println!("{:?}", &filtered_members);
-
-                    //could probably just check for 404 errors instead...
-                    match client.add_guild_member_role(guild_id, new_monarch_id, monarch_role_id).await?.status().is_success() {
-                        true => {
-                            break;
-                        }
-                        false => {
-                            println!("Failed to appoint monarch");
-                            if countdown == 0 {
-                                panic!("Could not find a suitable monarch!");
-                            }
-                            countdown -= 1;
-                        }
+                    false => {
+                        panic!("Failed to appoint monarch");
                     }
-                };
+                }
 
-                let filtered_members_json = serde_json::to_string(&filtered_members)?;
+
+                let filtered_members_json = serde_json::to_string(&filtered_ids)?;
                 println!("Saving list of remaining candidates {:?}", {&filtered_members_json});
                 fs::write("remaining_monarchs.json", filtered_members_json)?;
 
@@ -258,39 +267,34 @@ async fn main() -> anyhow::Result<()> {
 async fn get_eligible_members(
     client: &Client, 
     system_channel_id: Id<twilight_model::id::marker::ChannelMarker>, 
-    chunk_members: &Vec<twilight_model::guild::Member>
+    eligible_ids: &Vec<Id<UserMarker>>
 ) -> Vec<Id<UserMarker>> {
+
+    let eligible_ids = eligible_ids.clone();
+
     let mut file = File::open("remaining_monarchs.json").unwrap();
     let mut contents: Vec<u8> = Vec::new();
     file.read_to_end(&mut contents).unwrap();
-    let mut eligible_members = serde_json::from_slice::<Vec<Id<UserMarker>>>(&contents).unwrap();
-    if eligible_members.is_empty() {
+    let saved_ids = serde_json::from_slice::<Vec<Id<UserMarker>>>(&contents)
+        .unwrap();
+    let remaining_eligible_ids: Vec<Id<UserMarker>> = saved_ids
+        .iter()
+        .filter(|remaining_eligible_id| eligible_ids.contains(&remaining_eligible_id))
+        .cloned()
+        .collect();
+
+    
+    if remaining_eligible_ids.is_empty() {
         client
             .create_message(system_channel_id)
-            .content("And so another era of kings and queens has passed. What will this cycle of history bring?").unwrap()
-            .await.unwrap();
-        eligible_members = Vec::new();
-        for member in chunk_members {
-            let id = member.user.id;
-            if !member.user.bot {
-                eligible_members.push(id);
-            }
-        }
-    }
-    eligible_members
-    // ok so like i could filter all members or just keep trying until i pick an eligible one
-    // or i could filter all of them every time. If i do it this way, people who leave during a change
-    // will not be put back on the list until the cycle repeats.
-    // //serde_json::from_slice::<Vec<Id<UserMarker>>>(&contents).expect("Could not read into Vec")
-    // .into_iter()
-    // .filter(
-    //     | saved_user_marker| chunk_members.iter().any(
-    //         | guild_member| guild_member.user.id.eq(saved_user_marker)
-    //     )
-    // )
-    // .collect()
+            .content("And so another era of kings and queens has passed. What will this cycle of history bring?")
+            .unwrap()
+            .await
+            .unwrap();
 
-    // ok so maybe like i should just try to give someone admin because it could fail if all users are fetched
-    // and then the future admin leaves immediately after.
-    // yeah, it should probably just try to appoint the monarch and then try again if it fails...
+        return eligible_ids
+    }
+
+    return remaining_eligible_ids
+
 }
