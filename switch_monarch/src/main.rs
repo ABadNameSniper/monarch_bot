@@ -1,12 +1,11 @@
 use base64::encode;
 use rand::Rng;
 use std::{
-    process::exit, 
     fs::{
         self, 
         File
     }, 
-    io::Read
+    io::Read, sync::Arc
 };
 use twilight_gateway::{
     Event, 
@@ -76,12 +75,15 @@ async fn main() -> anyhow::Result<()> {
 
     let client = Client::new(token.to_owned());
 
+    let client = Arc::new(client);
+
     loop { let event = match shard.next_event().await {
         Ok(event) => match &event {
             Event::GuildCreate(guild) => {
                 shard
                     .command(&RequestGuildMembers::builder(guild.id).query("", None))
                     .await?;
+                //perhaps threading here to have access to the guild?
             }
             Event::Ready(_) => {
 
@@ -114,17 +116,8 @@ async fn main() -> anyhow::Result<()> {
                 }
                 println!("Recieved members!");
 
-
                 let guild_id: Id<GuildMarker> = fs::read_to_string("guild_id.txt")?.parse()?;
                 println!("Got server and role IDs");
-
-                let guild = client
-                    .guild(guild_id)
-                    .await?
-                    .model()
-                    .await?;
-
-                let roles_vec = guild.roles;
 
                 //consider giving @everyone the default permissions, while removing all permissions from other roles.
                 //would that work? would that even be useful? i have no idea -- but that is an idea!
@@ -135,55 +128,40 @@ async fn main() -> anyhow::Result<()> {
                         .parse()?
                 );                
 
-                println!("Guild permissions: {:?}", guild.permissions);
-
-                for role in roles_vec {
-                    if role.id.ne(&monarch_role_id) {
-                        println!("{} with id {}", role.name, role.id);
-                        client
-                            .update_role(guild_id, role.id)
-                            .permissions(DEFAULT_PERMISSIONS)//i can't figure out how to make it "no permissions"
-                            .await?;                    //so i'll leave it with just this one, the default.    
-                        //this shouldn't wait to be syncrhonous, but i can't figure out how to get things to work without doing this
-                        //wasn't there like a command function?
-                        //anyway making this part asynchronous is on the TODO list.
-                    }
-                }
-
-                /*
-                Two ideas: set id to 0000000001 or something that will never evaluate to true OR
-                two functions for determining new monarch based on whether there was an old one found.
-                */
                 
-                match fs::read_to_string("monarch_user_id.txt") {
-                    Ok(result) => {
-                        //i'm going to assume this just carries on if the member left the gulid already
-                        match client.remove_guild_member_role(guild_id, Id::new(result.parse()?), monarch_role_id).await {
-                            Ok(_) => (),
-                            Err(err) => {
-                                //If 404, then continue as normal? It means they've left the server
-                                println!("Could not remove old monarch. Reason: {err}")
-                            }
-                        };
+                let client_arc = client.clone();
+                let old_monarch_removed = tokio::spawn(async move {
+                    match fs::read_to_string("monarch_user_id.txt") {
+                        Ok(result) => {
+                            //i'm going to assume this just carries on if the member left the gulid already
+                            match 
+                                client_arc.remove_guild_member_role(
+                                    guild_id, 
+                                    Id::new(result.parse().expect("Could not parse result of file!")), 
+                                    monarch_role_id
+                                ).await 
+                            {
+                                Ok(_) => {
+                                    println!("Removed old monarch");
+                                },
+                                Err(err) => {
+                                    //If 404, then continue as normal? It means they've left the server
+                                    println!("Could not remove old monarch. Reason: {err}")
+                                }
+                            };
+                            fs::remove_file("monarch_user_id.txt").expect("Could not remove old monarch user id file!");
+                        },
+                        Err(_error) => ()
+                    };
+                });
 
-                        println!("Removed old monarch");
-                        fs::remove_file("monarch_user_id.txt")?;
-                    },
-                    Err(_error) => ()
-                };
-
-                let system_channel_id = guild
-                    .system_channel_id
-                    .expect("No system channel? Is that even possible?");
-
-
-                let mut filtered_ids: Vec<Id<UserMarker>> = get_eligible_members(&client, system_channel_id, &eligible_ids).await;
-
-                #[allow(unused)]
-                let mut new_monarch_id: Id<UserMarker> = Id::new(1);
-                
-
-                new_monarch_id = filtered_ids.swap_remove(
+                let mut filtered_ids: Vec<Id<UserMarker>> = get_eligible_members(
+                    client.clone(), 
+                    guild_id, 
+                    &eligible_ids
+                );
+ 
+                let new_monarch_id = filtered_ids.swap_remove(
                     rand::thread_rng().gen_range(0 .. filtered_ids.len())
                 );
                 
@@ -205,7 +183,10 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
 
+                //The time sensitive appointing to monarch is over.
+                tokio::try_join!(old_monarch_removed)?;
 
+                //perhaps do this only after a succesful response from Discord
                 let filtered_members_json = serde_json::to_string(&filtered_ids)?;
                 println!("Saving list of remaining candidates {:?}", {&filtered_members_json});
                 fs::write("remaining_monarchs.json", filtered_members_json)?;
@@ -214,30 +195,45 @@ async fn main() -> anyhow::Result<()> {
                 fs::write("monarch_user_id.txt", &monarch_id_string)?;
                 println!("New monarch appointed and ID saved");
 
-                client
-                    .create_message(system_channel_id)
-                    .content(&format!(
-                        "<@{monarch_id_string}>, you are the Monarch for today!"
-                    ))?
-                    .await?;
-                println!("Pinged monarch in system channel");
 
                 let guild_member = client
                     .guild_member(guild_id, new_monarch_id)
-                    .await?.model().await?;
+                    .await?
+                    .model()
+                    .await?;
 
                 println!("{guild_member:?}");
 
                 let user_id = new_monarch_id.get().to_string();
 
                 let (file_type, image_path) = match guild_member.avatar {
-                    Some(avatar) => (if avatar.is_animated() {"gif"} else {"webp"}, format!("guilds/{guild_id}/users/{user_id}/avatars/{avatar}")),
+                    Some(avatar) => (
+                        if avatar.is_animated() 
+                            {"gif"} 
+                        else 
+                            {"webp"}, 
+                        format!("guilds/{guild_id}/users/{user_id}/avatars/{avatar}")
+                    ),
                     None => match guild_member.user.avatar {
-                        Some(avatar) => (if avatar.is_animated() {"gif"} else {"webp"}, format!("avatars/{user_id}/{avatar}")),
-                        None => ("png", format!("embed/avatars/{}", guild_member.user.discriminator % 5)),//as per discord
+                        Some(avatar) => (
+                            if avatar.is_animated() 
+                                {"gif"} 
+                            else 
+                                {"webp"}, 
+                            format!("avatars/{user_id}/{avatar}")
+                        ),
+                        None => (
+                            "png", 
+                            format!("embed/avatars/{}", guild_member.user.discriminator % 5)
+                        ),//as per discord
                     }
                 };
-                let encoded_image = encode(reqwest::get(format!("{CDN_WEBSITE}/{image_path}.{file_type}")).await?.bytes().await?);
+                let encoded_image = encode(
+                    reqwest::get(format!("{CDN_WEBSITE}/{image_path}.{file_type}"))
+                        .await?
+                        .bytes()
+                        .await?
+                );
 
                 let icon = format!("data:image/{file_type};base64,{encoded_image}");
 
@@ -245,9 +241,52 @@ async fn main() -> anyhow::Result<()> {
 
                 println!("Server icon updated");
 
-                exit(0);
+                let guild = client
+                    .guild(guild_id)
+                    .await?
+                    .model()
+                    .await?;
+
+                client
+                    .create_message(guild.system_channel_id.unwrap())
+                    .content(&format!(
+                        "<@{monarch_id_string}>, you are the Monarch for today!"
+                    ))?
+                    .await?;
+                println!("Pinged monarch in system channel");
+
+                let roles_vec = guild.roles;
+
+                println!("Guild permissions: {:?}", guild.permissions);
+
+                let default_roles_tasks = roles_vec
+                    .into_iter()
+                    .filter(|role| role.id.ne(&monarch_role_id))
+                    .map(|role| {
+                        let client_arc = client.clone();
+
+                        tokio::spawn(async move {
+                            println!("{} with id {}", role.name, role.id);
+
+                            let result = client_arc
+                                .update_role(guild_id, role.id)
+                                .permissions(DEFAULT_PERMISSIONS)
+                                .await;
+
+                            if let Err(e) = result {
+                                eprintln!("Error updating role: {:?}", e);
+                            }
+                        })
+                    });
+
+                for thread in default_roles_tasks {
+                    //Probably unecessary! Where is try_join_all?
+                    tokio::try_join!(thread)?;
+                }
             }
-            other => {println!("other thing: {other:?}")}
+            other => {
+                println!("other thing: {other:?}")
+            }
 
         },
         Err(source) => {
@@ -264,9 +303,9 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn get_eligible_members(
-    client: &Client, 
-    system_channel_id: Id<twilight_model::id::marker::ChannelMarker>, 
+fn get_eligible_members(
+    client: Arc<Client>, 
+    guild_id: Id<twilight_model::id::marker::GuildMarker>, 
     eligible_ids: &Vec<Id<UserMarker>>
 ) -> Vec<Id<UserMarker>> {
 
@@ -284,17 +323,32 @@ async fn get_eligible_members(
         .collect();
 
     
-    if remaining_eligible_ids.is_empty() {
-        client
-            .create_message(system_channel_id)
-            .content("And so another era of kings and queens has passed. What will this cycle of history bring?")
-            .unwrap()
-            .await
-            .unwrap();
 
+    if remaining_eligible_ids.is_empty() {
+        let client_arc = client.clone();
+        //should finish like instantly and no need to make sure its wrapped up
+        tokio::spawn(async move {
+            //might as well get the cycle_channel_id here...
+            //theres probably a better way. Maybe in the future make it a tuple and return also
+            //a bool of whether to include the cycle text
+            let cycle_channel_id = client
+                    .guild(guild_id)
+                    .await.unwrap()
+                    .model()
+                    .await.unwrap()
+                    .system_channel_id.unwrap(); 
+
+            client_arc
+                .create_message(cycle_channel_id)
+                .content("And so another era of kings and queens has passed. What will this cycle of history bring?")
+                .unwrap()
+                .await
+                .unwrap();
+        });
+        
         return eligible_ids
     }
-
+ 
     return remaining_eligible_ids
 
 }
