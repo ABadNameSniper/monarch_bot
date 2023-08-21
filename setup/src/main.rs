@@ -1,4 +1,4 @@
-use std::{process::exit, fs, fs::*};
+use std::{fs, fs::*};
 use twilight_gateway::{Event, Intents, Shard, ShardId};
 use twilight_model::{
     gateway::{
@@ -17,8 +17,13 @@ use std::io;
 async fn main() -> anyhow::Result<()> {
 
     let mut new_guild = true;
-    //I don't know which is better. Mutable varialbes, or returning them in a match
-    let (delete_guild, server_id): (bool, u64) = match File::options().read(true).write(true).create_new(true).open("guild_id.txt") {
+
+    let (delete_guild, server_id): (bool, u64) = match File::options()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open("guild_id.txt") 
+    {
         Ok(_/*mut file*/) => {
             // let mut buf = String::new();
             // file.read_to_string(&mut buf)?;
@@ -26,9 +31,13 @@ async fn main() -> anyhow::Result<()> {
             (false, 0) //chatchpt said default values are ok
         },
         Err(_) => {
-            let server_id: u64 = fs::read_to_string("guild_id.txt")?.parse().expect("Couldn't parse file. Do you have a valid guild id?");
+            let server_id: u64 = fs::read_to_string("guild_id.txt")?
+                .parse()
+                .expect("Couldn't parse file. Do you have a valid guild id?");
 
-            println!("Looks like you already have a server. Press enter to continue or \"RESTART WITH NEW SERVER\" to restart with a new server. \"DELETE CURRENT SERVER\" will destroy the current server without creating a new one.");
+            println!(
+                "Looks like you already have a server. Press enter to continue or \"RESTART WITH NEW SERVER\" to restart with a new server. \"DELETE CURRENT SERVER\" will destroy the current server without creating a new one."
+            );
 
             let mut response = String::new();
 
@@ -47,17 +56,13 @@ async fn main() -> anyhow::Result<()> {
                     true
                 },
                 _ => {
-                    println!("Alright, stopping setup execution.");
-                    exit(0);
+                    panic!("Invalid response. Program exiting.");
                 }
             };
 
             (delete_guild, server_id)
         }
     };
-
-    // let token = env::var("DISCORD_TOKEN")?;
-    // To interact with the gateway we first need to connect to it (with a shard or cluster)
 
     let token = match fs::read_to_string("bot_token.txt") {
         Ok(result) => result,
@@ -87,7 +92,7 @@ async fn main() -> anyhow::Result<()> {
         Intents::GUILD_MEMBERS | Intents::GUILDS,
     );
 
-    let mut client = Client::new(token.to_owned());
+    let client = Client::new(token.to_owned());
 
     loop { let event = match shard.next_event().await {
         Ok(event) => match &event {
@@ -111,10 +116,27 @@ async fn main() -> anyhow::Result<()> {
                 println!("Status set!");
 
                 if delete_guild {
-                    client = delete_old_server(client, &server_id).await?;
+                    let discord_response = client
+                        .delete_guild(Id::new_checked(server_id).unwrap())
+                        .await?;
+
+                    println!("Response from discord: {discord_response:?}");
+                    println!("Destroyed old server!");
+
+                    let files = vec!["guild_id.txt", "monarch_user_id.txt", "monarch_role_id.txt", "remaining_monarchs.json"];
+
+                    for file in files {
+                        match fs::remove_file(file) {
+                            Ok(()) => println!("File {} deleted successfully", file),
+                            Err(error) => println!("Could not delete file {}: {}", file, error),
+                        }
+                    }
+
+                    println!("Deleted records of old server");
+
                     if !new_guild {
                         println!("No new guild... exiting!");
-                        exit(0);
+                        break;
                     }
                 }
 
@@ -129,8 +151,6 @@ async fn main() -> anyhow::Result<()> {
                 println!("Guild created!");
 
                 //save the server id
-                //new_file.write_all(&new_guild.id.get().to_string())?;
-                //idk how to work with the file struct thingies so we're doing it this way I guess
                 fs::write("guild_id.txt", new_guild.id.get().to_string())?;
                 println!("Guild ID saved");
 
@@ -152,20 +172,14 @@ async fn main() -> anyhow::Result<()> {
 
                 let monarch_role_id = monarch_role.model().await?.id;
 
-                //TODO
-                // wait for everyone to join the server, have slash command to start the monarchistration
-                // (destroy slash command after use)
-                // include options like period of role changing
-
                 println!("Monarch role created. Waiting for first person to join");
 
                 fs::write("monarch_role_id.txt", monarch_role_id.get().to_string())?;
-                println!("Admin role saved to file");
+                println!("Monarch role saved to file");
 
                 fs::write("remaining_monarchs.json", "")?;
 
-                //
-                exit(0);
+                break
                 
             }
             _ => {}
@@ -182,26 +196,4 @@ async fn main() -> anyhow::Result<()> {
     }; tracing::debug!(?event, "event"); }
 
     Ok(())
-}
-
-async fn delete_old_server(client: Client, &server_id: &u64) -> anyhow::Result<Client> {
-    let discord_response = client
-        .delete_guild(Id::new_checked(server_id).unwrap())
-        .await?;
-
-    println!("Response from discord: {discord_response:?}");
-    println!("Destroyed old server!");
-
-    let files = vec!["guild_id.txt", "monarch_user_id.txt", "monarch_role_id.txt", "remaining_monarchs.json"];
-
-    for file in files {
-        match fs::remove_file(file) {
-            Ok(()) => println!("File {} deleted successfully", file),
-            Err(error) => println!("Error deleting file {}: {}", file, error),
-        }
-    }
-
-    println!("Deleted records of old server");
-
-    Ok(client)
 }
