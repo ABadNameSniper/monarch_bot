@@ -5,7 +5,8 @@ use std::{
         self, 
         File
     }, 
-    io::Read, sync::Arc
+    io::Read, 
+    sync::Arc
 };
 use twilight_gateway::{
     Event, 
@@ -39,11 +40,13 @@ use twilight_http::Client;
 
 const CDN_WEBSITE: &str = "https://cdn.discordapp.com";
 
+//TODO: remove function, make it better, then organize code
+// sounds oxymoronic... hmmm.
+
 // I don't know how to separate out creating events and managing them!
 // TODO: create a default permissions file. It literally just needs to be a 64 bitfield/int/whatever.
 // use these as backup (maybe remove @everyone, and managing events/emojis)
 const DEFAULT_PERMISSIONS: Permissions = Permissions::from_bits_truncate(
-    
     Permissions::CREATE_INVITE.bits()       | Permissions::ADD_REACTIONS.bits()             | 
     Permissions::STREAM.bits()                  | Permissions::VIEW_CHANNEL.bits()              | 
     Permissions::SEND_MESSAGES.bits()           | Permissions::EMBED_LINKS.bits()               | 
@@ -155,12 +158,27 @@ async fn main() -> anyhow::Result<()> {
                     };
                 });
 
-                let mut filtered_ids: Vec<Id<UserMarker>> = get_eligible_members(
-                    client.clone(), 
-                    guild_id, 
-                    &eligible_ids
-                );
- 
+
+                let mut remamining_monarchs_file = File::open("remaining_monarchs.json").unwrap();
+                let mut remaining_monarchs_contents: Vec<u8> = Vec::new();
+                remamining_monarchs_file.read_to_end(&mut remaining_monarchs_contents).unwrap();
+
+                let saved_ids = serde_json::from_slice::<Vec<Id<UserMarker>>>(&remaining_monarchs_contents)
+                    .unwrap();
+
+                let mut filtered_ids: Vec<Id<UserMarker>> = saved_ids
+                    .iter()
+                    .filter(|remaining_eligible_id| eligible_ids.contains(&remaining_eligible_id))
+                    .cloned()
+                    .collect();
+
+                let mut new_cycle = false;
+
+                if filtered_ids.is_empty() {
+                    filtered_ids = eligible_ids;
+                    new_cycle = true;
+                }
+            
                 let new_monarch_id = filtered_ids.swap_remove(
                     rand::thread_rng().gen_range(0 .. filtered_ids.len())
                 );
@@ -169,24 +187,17 @@ async fn main() -> anyhow::Result<()> {
                 println!("{:?}", &filtered_ids);
 
                 //could probably just check for 404 errors instead...
-                match 
-                    client.add_guild_member_role(guild_id, new_monarch_id, monarch_role_id)
-                        .await?
-                        .status()
-                        .is_success() 
+                if !client.add_guild_member_role(guild_id, new_monarch_id, monarch_role_id)
+                    .await?
+                    .status()
+                    .is_success()
                 {
-                    true => {
-                        ();
-                    }
-                    false => {
-                        panic!("Failed to appoint monarch");
-                    }
+                    panic!("Failed to appoint monarch");
                 }
 
-                //The time sensitive appointing to monarch is over.
+                //Ready to save new monarch
                 tokio::try_join!(old_monarch_removed)?;
 
-                //perhaps do this only after a succesful response from Discord
                 let filtered_members_json = serde_json::to_string(&filtered_ids)?;
                 println!("Saving list of remaining candidates {:?}", {&filtered_members_json});
                 fs::write("remaining_monarchs.json", filtered_members_json)?;
@@ -247,8 +258,19 @@ async fn main() -> anyhow::Result<()> {
                     .model()
                     .await?;
 
+                let system_channel_id = guild.system_channel_id.unwrap();
+
+                if new_cycle {
+                    client
+                        .create_message(system_channel_id)
+                        .content(
+                            "And so another era of kings and queens has passed. What will this cycle of history bring?"
+                        )?
+                        .await?;
+                }
+
                 client
-                    .create_message(guild.system_channel_id.unwrap())
+                    .create_message(system_channel_id)
                     .content(&format!(
                         "<@{monarch_id_string}>, you are the Monarch for today!"
                     ))?
@@ -283,6 +305,9 @@ async fn main() -> anyhow::Result<()> {
                     //Probably unecessary! Where is try_join_all?
                     tokio::try_join!(thread)?;
                 }
+
+                break;
+
             }
             other => {
                 println!("other thing: {other:?}")
@@ -301,54 +326,4 @@ async fn main() -> anyhow::Result<()> {
     }; tracing::debug!(?event, "event"); }
 
     Ok(())
-}
-
-fn get_eligible_members(
-    client: Arc<Client>, 
-    guild_id: Id<twilight_model::id::marker::GuildMarker>, 
-    eligible_ids: &Vec<Id<UserMarker>>
-) -> Vec<Id<UserMarker>> {
-
-    let eligible_ids = eligible_ids.clone();
-
-    let mut file = File::open("remaining_monarchs.json").unwrap();
-    let mut contents: Vec<u8> = Vec::new();
-    file.read_to_end(&mut contents).unwrap();
-    let saved_ids = serde_json::from_slice::<Vec<Id<UserMarker>>>(&contents)
-        .unwrap();
-    let remaining_eligible_ids: Vec<Id<UserMarker>> = saved_ids
-        .iter()
-        .filter(|remaining_eligible_id| eligible_ids.contains(&remaining_eligible_id))
-        .cloned()
-        .collect();
-
-    
-
-    if remaining_eligible_ids.is_empty() {
-        let client_arc = client.clone();
-        //should finish like instantly and no need to make sure its wrapped up
-        tokio::spawn(async move {
-            //might as well get the cycle_channel_id here...
-            //theres probably a better way. Maybe in the future make it a tuple and return also
-            //a bool of whether to include the cycle text
-            let cycle_channel_id = client
-                    .guild(guild_id)
-                    .await.unwrap()
-                    .model()
-                    .await.unwrap()
-                    .system_channel_id.unwrap(); 
-
-            client_arc
-                .create_message(cycle_channel_id)
-                .content("And so another era of kings and queens has passed. What will this cycle of history bring?")
-                .unwrap()
-                .await
-                .unwrap();
-        });
-        
-        return eligible_ids
-    }
- 
-    return remaining_eligible_ids
-
 }
