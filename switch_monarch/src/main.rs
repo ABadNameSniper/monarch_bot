@@ -84,6 +84,7 @@ async fn main() -> anyhow::Result<()> {
         Ok(event) => match &event {
             Event::GuildCreate(guild) => {
                 shard
+                    //Not sure if this scales!
                     .command(&RequestGuildMembers::builder(guild.id).query("", None))
                     .await?;
                 //perhaps threading here to have access to the guild?
@@ -97,15 +98,18 @@ async fn main() -> anyhow::Result<()> {
                     name: "Replacing the monarch...".to_owned(),
                     url: None,
                 };
-                let _command = UpdatePresence::new(
+                let command = UpdatePresence::new(
                     Vec::from([Activity::from(minimal_activity)]),
                     false,
                     Some(1),
                     Status::Online,
                 )?;
 
+                //This will probably not significantly negatively impact delays...
+                shard.command(&command).await.expect("Something went wrong setting the status!");
+                println!("Status set!"); 
             }
-            //Not sure if this scales!
+            
             Event::MemberChunk(chunk) => {
                 let eligible_ids: Vec<Id<UserMarker>> = chunk
                     .to_owned()
