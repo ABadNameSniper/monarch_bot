@@ -174,7 +174,7 @@ async fn main() -> anyhow::Result<()> {
                     initial_invite
                 };
 
-                let j = serde_json::to_string(&conf)?;
+                let j = serde_json::to_string_pretty(&conf)?;
 
                 match fs::write("conf.json", j) {
                     Ok(_) => {
