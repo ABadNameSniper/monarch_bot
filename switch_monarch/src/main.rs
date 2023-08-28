@@ -258,7 +258,7 @@ async fn main() -> anyhow::Result<()> {
                     "<@{monarch_id_string}>, you are the new Monarch!"
                 );
 
-                if !no_ping {
+                if no_ping {
                     let display_name: String = match guild_member.nick {
                         Some(nick) => nick,
                         None => {
