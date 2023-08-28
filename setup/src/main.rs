@@ -1,4 +1,5 @@
 use std::{fs, fs::*};
+use setup::Configuration;
 use twilight_gateway::{Event, Intents, Shard, ShardId};
 use twilight_model::{
     gateway::{
@@ -7,67 +8,38 @@ use twilight_model::{
             Activity, ActivityType, MinimalActivity, Status
         }
     }, 
-    id::Id,
+    id::{Id, marker::{UserMarker, GuildMarker}},
     guild::Permissions
 };
 use twilight_http::Client;
 use std::io;
+use serde_json;
+
+// I don't know how to separate out creating events and managing them!
+// TODO: create a default permissions file. It literally just needs to be a 64 bitfield/int/whatever.
+// use these as backup (maybe remove @everyone, and managing events/emojis)
+const DEFAULT_PERMISSIONS: Permissions = Permissions::from_bits_truncate(
+    Permissions::CREATE_INVITE.bits()       | Permissions::ADD_REACTIONS.bits()             | 
+    Permissions::STREAM.bits()                  | Permissions::VIEW_CHANNEL.bits()              | 
+    Permissions::SEND_MESSAGES.bits()           | Permissions::EMBED_LINKS.bits()               | 
+    Permissions::ATTACH_FILES.bits()            | Permissions::READ_MESSAGE_HISTORY.bits()      | 
+    Permissions::MENTION_EVERYONE.bits()        | Permissions::USE_EXTERNAL_EMOJIS.bits()       | 
+    Permissions::CONNECT.bits()                 | Permissions::SPEAK.bits()                     |
+    Permissions::USE_VAD.bits()                 | Permissions::CHANGE_NICKNAME.bits()           | 
+    Permissions::MANAGE_GUILD_EXPRESSIONS.bits()| Permissions::USE_SLASH_COMMANDS.bits()        |
+    Permissions::REQUEST_TO_SPEAK.bits()        | Permissions::MANAGE_EVENTS.bits()             |
+    Permissions::CREATE_PUBLIC_THREADS.bits()   | Permissions::CREATE_PRIVATE_THREADS.bits()    | 
+    Permissions::USE_EXTERNAL_STICKERS.bits()   | Permissions::SEND_MESSAGES_IN_THREADS.bits()  |
+    Permissions::USE_EMBEDDED_ACTIVITIES.bits() | Permissions::USE_SOUNDBOARD.bits()            |
+    Permissions::SEND_VOICE_MESSAGES.bits()     
+);
+//should be like 102235358350913 or something
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-
-    let mut new_guild = true;
-
-    let (delete_guild, server_id): (bool, u64) = match File::options()
-        .read(true)
-        .write(true)
-        .create_new(true)
-        .open("guild_id.txt") 
-    {
-        Ok(_/*mut file*/) => {
-            // let mut buf = String::new();
-            // file.read_to_string(&mut buf)?;
-            //(false, buf.parse::<u64>().unwrap())
-            (false, 0) //chatchpt said default values are ok
-        },
+    let (delete_guild, new_guild, old_guild_id, token): (bool, bool, Id<GuildMarker>, String) = match File::open("conf.json") {
         Err(_) => {
-            let server_id: u64 = fs::read_to_string("guild_id.txt")?
-                .parse()
-                .expect("Couldn't parse file. Do you have a valid guild id?");
-
-            println!(
-                "Looks like you already have a server. Press enter to continue or \"RESTART WITH NEW SERVER\" to restart with a new server. \"DELETE CURRENT SERVER\" will destroy the current server without creating a new one."
-            );
-
-            let mut response = String::new();
-
-            io::stdin()
-                .read_line(&mut response)
-                .expect("Something went wrong reading input");
-
-            println!("Response: {response}");
-
-            let delete_guild = match response.trim() {
-                "RESTART WITH NEW SERVER" => {
-                    true
-                },
-                "DELETE CURRENT SERVER" => {
-                    new_guild = false;
-                    true
-                },
-                _ => {
-                    panic!("Invalid response. Program exiting.");
-                }
-            };
-
-            (delete_guild, server_id)
-        }
-    };
-
-    let token = match fs::read_to_string("bot_token.txt") {
-        Ok(result) => result,
-        Err(_) => {
-            println!("You'll need to save your bot token to run the program automatically. Paste it here and it will get saved to bot_token.txt");
+            println!("You'll need to save your bot token to run the program automatically. Paste it here and it will get saved (unencrypted!) to conf.json");
 
             let mut response = String::new();
             
@@ -77,9 +49,37 @@ async fn main() -> anyhow::Result<()> {
 
             response = response.trim().to_string();
 
-            fs::write("bot_token.txt", &response)?;
+            (false, true, Id::new(1), response) 
+            //default value, will never get touched because delete guild is false
+        },
+        Ok(f) => {
+            let conf: Configuration = serde_json::from_reader(f).expect("Failed to parse JSON. Is everything formatted correctly?");
 
-            response
+            println!("It seems you already have a configuration file.");
+            println!("Type \"RESTART WITH NEW SERVER\" and the program will attempt to set up a new server after deleting the old one");
+            println!("Type \"DELETE CURRENT SERVER\" and the program will try to delete the old one and then halt.");
+
+            let mut response = String::new();
+
+            io::stdin()
+                .read_line(&mut response)
+                .expect("Something went wrong reading input");
+
+            println!("Response: {response}");
+
+            let new_guild = match response.trim() {
+                "RESTART WITH NEW SERVER" => {
+                    true
+                },
+                "DELETE CURRENT SERVER" => {
+                    false
+                },
+                _ => {
+                    panic!("Invalid response. Program exiting.");
+                }
+            };
+
+            (true, new_guild, conf.guild_id, conf.token)
         }
     };
 
@@ -117,22 +117,15 @@ async fn main() -> anyhow::Result<()> {
 
                 if delete_guild {
                     let discord_response = client
-                        .delete_guild(Id::new_checked(server_id).unwrap())
+                        .delete_guild(old_guild_id)
                         .await?;
 
                     println!("Response from discord: {discord_response:?}");
                     println!("Destroyed old server!");
 
-                    let files = vec!["guild_id.txt", "monarch_user_id.txt", "monarch_role_id.txt", "remaining_monarchs.json"];
+                    fs::remove_file("conf.json")?;
 
-                    for file in files {
-                        match fs::remove_file(file) {
-                            Ok(()) => println!("File {} deleted successfully", file),
-                            Err(error) => println!("Could not delete file {}: {}", file, error),
-                        }
-                    }
-
-                    println!("Deleted records of old server");
+                    println!("Old conf file");
 
                     if !new_guild {
                         println!("No new guild... exiting!");
@@ -150,16 +143,12 @@ async fn main() -> anyhow::Result<()> {
                 let new_system_channel_id = new_guild.system_channel_id.expect("Couldn't get the system channel ID");
                 println!("Guild created!");
 
-                //save the server id
-                fs::write("guild_id.txt", new_guild.id.get().to_string())?;
-                println!("Guild ID saved");
-
                 // This doesn't return the code
                 let new_invite = client.create_invite(new_system_channel_id).max_age(0)?.await?;
                 // Get the code from here instead
                 let new_channel_id = new_invite.model().await?.channel.expect("oops no channel").id;
                 let channel_invites = client.channel_invites(new_channel_id).await?;
-                let new_invite_code = &channel_invites.model().await?[0].code;
+                let new_invite_code = channel_invites.model().await?[0].code.to_owned();
 
                 println!("Invite code: discord.gg/{new_invite_code}");
 
@@ -172,12 +161,23 @@ async fn main() -> anyhow::Result<()> {
 
                 let monarch_role_id = monarch_role.model().await?.id;
 
-                println!("Monarch role created. Waiting for first person to join");
+                let monarch_user_id = Id::new(1);
+                let remaining_monarchs: Vec<Id<UserMarker>> = Vec::new();
 
-                fs::write("monarch_role_id.txt", monarch_role_id.get().to_string())?;
-                println!("Monarch role saved to file");
+                let conf = Configuration {
+                    token,
+                    guild_id: new_guild.id,
+                    monarch_role_id,
+                    monarch_user_id,
+                    remaining_monarchs,
+                    no_ping: false,
+                    default_permissions: DEFAULT_PERMISSIONS,
+                    initial_invite: new_invite_code,
+                };
 
-                fs::write("remaining_monarchs.json", "")?;
+                let j = serde_json::to_string_pretty(&conf)?;
+
+                fs::write("conf.json", j)?;
 
                 break
                 
