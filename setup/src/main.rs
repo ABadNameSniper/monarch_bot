@@ -35,6 +35,9 @@ const DEFAULT_PERMISSIONS: Permissions = Permissions::from_bits_truncate(
 );
 //should be like 102235358350913 or something
 
+const DEFAULT_MONARCH_PERMISSIONS: Permissions = Permissions::ADMINISTRATOR;
+//8
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let (delete_guild, new_guild, old_guild_id, token): (bool, bool, Id<GuildMarker>, String) = match File::open("conf.json") {
@@ -152,11 +155,9 @@ async fn main() -> anyhow::Result<()> {
 
                 println!("Invite code: discord.gg/{new_invite_code}");
 
-                let monarch_permission = Permissions::ADMINISTRATOR;
-
                 let monarch_role = client.create_role(new_guild.id)
                     .name("The Monarch")
-                    .permissions(monarch_permission)
+                    .permissions(DEFAULT_MONARCH_PERMISSIONS)
                     .await?;
 
                 let monarch_role_id = monarch_role.model().await?.id;
@@ -172,6 +173,7 @@ async fn main() -> anyhow::Result<()> {
                     remaining_monarchs,
                     no_ping: false,
                     default_permissions: DEFAULT_PERMISSIONS,
+                    default_monarch_permissions: DEFAULT_MONARCH_PERMISSIONS,
                     initial_invite: new_invite_code,
                 };
 

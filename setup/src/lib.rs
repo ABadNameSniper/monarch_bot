@@ -25,5 +25,6 @@ pub struct Configuration {
     pub remaining_monarchs: Vec<Id<UserMarker>>,
     pub no_ping: bool,
     pub default_permissions: Permissions,
+    pub default_monarch_permissions: Permissions,
     pub initial_invite: String,
 }

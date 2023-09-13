@@ -51,7 +51,8 @@ async fn main() -> anyhow::Result<()> {
         remaining_monarchs,
         no_ping,
         default_permissions,
-        initial_invite
+        default_monarch_permissions,
+        initial_invite,
     } = conf;
 
     let mut shard = Shard::new(
@@ -171,7 +172,8 @@ async fn main() -> anyhow::Result<()> {
                     remaining_monarchs: filtered_ids,
                     no_ping,
                     default_permissions,
-                    initial_invite
+                    default_monarch_permissions,
+                    initial_invite,
                 };
 
                 let j = serde_json::to_string_pretty(&conf)?;
